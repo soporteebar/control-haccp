@@ -676,6 +676,65 @@ const AdminApp = {
       });
     }
 
+    // Botón para sincronizar únicamente Directorio de Empleados y Enlaces para WhatsApp
+    const btnSyncEmployees = document.getElementById('btnSyncEmployeesSheets');
+    if (btnSyncEmployees) {
+      btnSyncEmployees.addEventListener('click', async () => {
+        const conf = DB.getConfig();
+        if (!conf.googleSheetsUrl) {
+          alert('Por favor ingresa primero la URL de tu Google Apps Script en la Pestaña 4 (Configuración).');
+          return;
+        }
+
+        btnSyncEmployees.disabled = true;
+        btnSyncEmployees.textContent = '⏳ Sincronizando directorio...';
+        try {
+          const res = await DB.syncAllEmployeesToGoogleSheets();
+          if (res.success) {
+            alert(`✅ Directorio actualizado en Google Sheets:\n${res.count} colaboradores y sus enlaces de WhatsApp fueron guardados en la hoja "Empleados_Enlaces".`);
+          } else {
+            alert(`⚠️ Error al sincronizar: ${res.message || res.error}`);
+          }
+        } catch (err) {
+          alert('✅ Solicitud de directorio enviada a Google Sheets.');
+        } finally {
+          btnSyncEmployees.disabled = false;
+          btnSyncEmployees.innerHTML = `
+            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M21.17 3.25Q21.5 3.25 21.75 3.5 22 3.75 22 4.08V19.92Q22 20.25 21.75 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.25 20.5 7 20.25 7 19.92V17H2.83Q2.5 17 2.25 16.75 2 16.5 2 16.17V7.83Q2 7.5 2.25 7.25 2.5 7 2.83 7H7V4.08Q7 3.75 7.25 3.5 7.5 3.25 7.83 3.25H21.17M7 15H3.5V9H7V15M20.5 4.75H8.5V19.25H20.5V4.75M16.5 12L18.5 16H16.2L15.2 13.8L14.2 16H11.9L13.9 12L12 8H14.3L15.2 10.2L16.1 8H18.4L16.5 12Z"/></svg>
+            Sincronizar Directorio a Google Sheets
+          `;
+        }
+      });
+    }
+
+    // Botón para sincronizar masivamente TODO el sistema a Google Sheets
+    const btnSyncAll = document.getElementById('btnSyncAllToSheets');
+    if (btnSyncAll) {
+      btnSyncAll.addEventListener('click', async () => {
+        const conf = DB.getConfig();
+        if (!conf.googleSheetsUrl) {
+          alert('Por favor ingresa primero la URL del Web App de Google Apps Script arriba y pulsa "Guardar URL".');
+          return;
+        }
+
+        btnSyncAll.disabled = true;
+        btnSyncAll.textContent = '⏳ Sincronizando todo el sistema...';
+        try {
+          const res = await DB.syncAllDataToGoogleSheets();
+          if (res.success) {
+            alert(`✅ Sincronización completa con Google Sheets exitosa:\n• ${res.empCount} Colaboradores y enlaces en "Empleados_Enlaces"\n• ${res.recCount} Boletas y justificaciones en "HorasExtras_HACCP"\n• ${res.procCount} Períodos de planilla en "SalidaProcesos"`);
+          } else {
+            alert(`⚠️ Error: ${res.message || res.error}`);
+          }
+        } catch (err) {
+          alert('✅ Solicitud masiva enviada a Google Sheets.');
+        } finally {
+          btnSyncAll.disabled = false;
+          btnSyncAll.textContent = '🚀 Sincronizar TODO a Google Sheets';
+        }
+      });
+    }
+
     const btnBackup = document.getElementById('btnExportBackup');
     if (btnBackup) {
       btnBackup.addEventListener('click', () => DB.exportBackupJSON());

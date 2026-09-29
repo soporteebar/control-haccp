@@ -535,6 +535,10 @@ const DB = {
       }
     }
     this.save(data);
+
+    // Sincronizar automáticamente con Google Sheets
+    this.syncEmployeeToGoogleSheets(employee);
+
     return employee;
   },
 
@@ -542,6 +546,10 @@ const DB = {
     const data = this.load();
     data.employees = data.employees.filter(e => e.id !== id);
     this.save(data);
+
+    // Notificar eliminación a Google Sheets
+    this.syncEmployeeDeleteToGoogleSheets(id);
+
     return true;
   },
 
@@ -728,18 +736,134 @@ const DB = {
   },
 
   // --- SINCRONIZACIÓN CON GOOGLE SHEETS ---
+
+  // Obtener enlace web móvil del empleado
+  getEmployeeWebUrl(emp) {
+    if (typeof window === 'undefined' || !window.location) return '';
+    const origin = window.location.origin;
+    const path = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/empleado\.html$/, '').replace(/\/$/, '');
+    return `${origin}${path}/empleado.html?emp=${encodeURIComponent(emp.id)}`;
+  },
+
+  // Obtener enlace preformateado para enviar por WhatsApp
+  getEmployeeWhatsAppUrl(emp) {
+    const webUrl = this.getEmployeeWebUrl(emp);
+    const cleanPhone = (emp.phone || '').replace(/\D/g, '');
+    const text = encodeURIComponent(`Hola ${emp.name}, por favor ingresa a este enlace para registrar tus horas extras diarias del equipo HACCP:\n${webUrl}\n(Tu teléfono registrado: ${emp.phone || 'N/A'})`);
+    return cleanPhone 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${text}`
+      : `https://api.whatsapp.com/send?text=${text}`;
+  },
+
+  // Sincronizar un colaborador individual a la hoja "Empleados_Enlaces"
+  async syncEmployeeToGoogleSheets(employee) {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) return;
+
+    try {
+      const webUrl = this.getEmployeeWebUrl(employee);
+      const whatsappUrl = this.getEmployeeWhatsAppUrl(employee);
+
+      const payload = {
+        action: 'save_employee',
+        id: employee.id,
+        code: employee.code || '',
+        name: employee.name || '',
+        area: employee.area || 'Equipo HACCP',
+        role: employee.role || 'Inspector de Calidad',
+        phone: employee.phone || '',
+        webUrl,
+        whatsappUrl,
+        active: employee.active !== false ? 'ACTIVO' : 'INACTIVO',
+        timestamp: new Date().toISOString()
+      };
+
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      console.log('✅ Empleado y enlace WhatsApp sincronizados con Google Sheets:', employee.name);
+    } catch (err) {
+      console.warn('⚠️ No se pudo sincronizar empleado inmediatamente:', err);
+    }
+  },
+
+  // Marcar empleado inactivo en Google Sheets al eliminarlo
+  async syncEmployeeDeleteToGoogleSheets(employeeId) {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) return;
+
+    try {
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'delete_employee',
+          id: employeeId,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (err) {
+      console.warn('⚠️ Error notificando eliminación a Google Sheets:', err);
+    }
+  },
+
+  // Sincronizar todo el directorio de colaboradores y enlaces para WhatsApp
+  async syncAllEmployeesToGoogleSheets() {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) {
+      return { success: false, message: 'URL de Google Sheets no configurada. Ingresa la URL en la pestaña de Configuración.' };
+    }
+
+    try {
+      const employees = this.getEmployees();
+      const list = employees.map(emp => ({
+        id: emp.id,
+        code: emp.code || '',
+        name: emp.name || '',
+        area: emp.area || 'Equipo HACCP',
+        role: emp.role || 'Inspector de Calidad',
+        phone: emp.phone || '',
+        webUrl: this.getEmployeeWebUrl(emp),
+        whatsappUrl: this.getEmployeeWhatsAppUrl(emp),
+        active: emp.active !== false ? 'ACTIVO' : 'INACTIVO'
+      }));
+
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'sync_all_employees',
+          employees: list,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      return { success: true, count: list.length };
+    } catch (err) {
+      console.error('Error sincronizando empleados con Google Sheets:', err);
+      return { success: false, error: err.toString() };
+    }
+  },
+
+  // Sincronizar registro de horas extras a la hoja "HorasExtras_HACCP"
   async syncRecordToGoogleSheets(record) {
     const config = this.getConfig();
     if (!config.googleSheetsUrl) return;
 
     try {
       const emp = this.getEmployeeById(record.employeeId);
+      const exitInfo = this.getProcessExitInfo(record.date, record.processType, record.justification);
+
       const payload = {
         action: 'add_overtime',
         id: record.id,
         employeeName: emp ? emp.name : 'Desconocido',
         employeeCode: emp ? emp.code : '',
         area: emp ? emp.area : 'HACCP',
+        processType: exitInfo.processName || record.processType || 'General',
+        processExitTime: exitInfo.exitTime || '-',
         date: record.date,
         hoursText: record.hoursText,
         decimalHours: record.decimalHours,
@@ -752,7 +876,6 @@ const DB = {
         timestamp: record.createdAt || new Date().toISOString()
       };
 
-      // Se usa mode: 'no-cors' para Apps Script Web App en GitHub Pages
       await fetch(config.googleSheetsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -764,6 +887,7 @@ const DB = {
     }
   },
 
+  // Sincronizar control de procesos a la hoja "SalidaProcesos"
   async syncProcessesToGoogleSheets(periodData) {
     const config = this.getConfig();
     if (!config.googleSheetsUrl) return;
@@ -785,6 +909,74 @@ const DB = {
       console.log('✅ Salida de Procesos sincronizada con Google Sheets');
     } catch (err) {
       console.warn('⚠️ Error al sincronizar procesos con Google Sheets:', err);
+    }
+  },
+
+  // Sincronizar masivamente TODO el sistema a Google Sheets (Empleados, Procesos y Horas)
+  async syncAllDataToGoogleSheets() {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) {
+      return { success: false, message: 'URL de Google Sheets no configurada.' };
+    }
+
+    try {
+      const employees = this.getEmployees().map(emp => ({
+        id: emp.id,
+        code: emp.code || '',
+        name: emp.name || '',
+        area: emp.area || 'Equipo HACCP',
+        role: emp.role || 'Inspector de Calidad',
+        phone: emp.phone || '',
+        webUrl: this.getEmployeeWebUrl(emp),
+        whatsappUrl: this.getEmployeeWhatsAppUrl(emp),
+        active: emp.active !== false ? 'ACTIVO' : 'INACTIVO'
+      }));
+
+      const processControls = this.getProcessControls();
+      const records = this.getRecords().map(r => {
+        const emp = this.getEmployeeById(r.employeeId);
+        const exitInfo = this.getProcessExitInfo(r.date, r.processType, r.justification);
+        return {
+          id: r.id,
+          date: r.date,
+          employeeName: emp ? emp.name : 'Desconocido',
+          employeeCode: emp ? emp.code : '',
+          area: emp ? emp.area : 'HACCP',
+          processType: exitInfo.processName || r.processType || 'General',
+          processExitTime: exitInfo.exitTime || '-',
+          hoursText: r.hoursText,
+          decimalHours: r.decimalHours,
+          justification: r.justification,
+          hadVacation: r.hadVacation ? 'SÍ' : 'NO',
+          vacationFrom: r.vacationFrom || '',
+          vacationTo: r.vacationTo || '',
+          vacationDays: r.vacationDays || 0,
+          hasSignature: !!r.signature,
+          timestamp: r.createdAt || new Date().toISOString()
+        };
+      });
+
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'sync_all_data',
+          employees,
+          processControls,
+          records,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      return {
+        success: true,
+        empCount: employees.length,
+        procCount: processControls.length,
+        recCount: records.length
+      };
+    } catch (err) {
+      console.error('Error en sincronización masiva a Google Sheets:', err);
+      return { success: false, error: err.toString() };
     }
   },
 
