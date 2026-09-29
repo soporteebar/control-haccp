@@ -1,0 +1,205 @@
+/* ==========================================================================
+   print.css - Estilos oficiales para impresión de boletas HACCP
+   Configura el documento para que al imprimir o guardar como PDF se ajuste
+   a EXACTAMENTE 1 PÁGINA (Carta / A4) con líneas para firmas físicas,
+   idéntico al formulario físico oficial de MACESA (Imagen 2).
+   ========================================================================== */
+
+/* En pantalla normal, ocultar la plantilla imprimible */
+@media screen {
+  .official-print-sheet {
+    display: none !important;
+  }
+}
+
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 8mm 10mm;
+  }
+
+  *, *:before, *:after {
+    box-sizing: border-box !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 8.5pt !important;
+    line-height: 1.2 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar toda la interfaz web interactiva */
+  header,
+  nav,
+  .top-navbar,
+  .nav-tabs-wrapper,
+  .filter-bar,
+  .btn,
+  .btn-quick-tag,
+  .quick-tags-container,
+  button,
+  .toast-success,
+  .signature-actions,
+  #employeeSelectContainer,
+  #phoneGateCard,
+  #employeeMainContent,
+  .modal-overlay,
+  .no-print {
+    display: none !important;
+  }
+
+  .main-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Mostrar exclusivamente la hoja oficial para 1 página física */
+  .official-print-sheet {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Encabezado Oficial */
+  .print-official-header {
+    border-bottom: 2px solid #000000;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+  }
+
+  .print-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .print-logo {
+    height: 36px;
+    max-width: 110px;
+    object-fit: contain;
+  }
+
+  .print-title-box {
+    text-align: center;
+    flex-grow: 1;
+    padding: 0 10px;
+  }
+
+  .print-title {
+    font-size: 13pt !important;
+    font-weight: 800 !important;
+    margin: 0;
+    color: #000000 !important;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+
+  .print-date-box {
+    font-size: 8.5pt;
+    text-align: right;
+    white-space: nowrap;
+    min-width: 130px;
+  }
+
+  .print-employee-info {
+    font-size: 8.5pt;
+    padding-top: 3px;
+    border-top: 1px dashed #999999;
+  }
+
+  .print-info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5pt;
+  }
+
+  /* Tablas de impresión oficiales con bordes sólidos negros */
+  .print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    font-size: 8pt !important;
+  }
+
+  .print-table th,
+  .print-table td {
+    border: 1px solid #000000 !important;
+    padding: 2.5px 5px !important;
+    color: #000000 !important;
+    vertical-align: middle;
+  }
+
+  .print-table th {
+    background-color: #e5e7eb !important;
+    font-weight: bold;
+    text-align: center;
+    font-size: 8pt;
+  }
+
+  .print-total-row td {
+    background-color: #f3f4f6 !important;
+    font-weight: bold;
+    font-size: 8.5pt;
+  }
+
+  /* Sección de Vacaciones */
+  .print-vacations-section {
+    margin-top: 4px;
+  }
+
+  .print-vacation-table {
+    margin-top: 2px;
+    margin-bottom: 4px;
+  }
+
+  .print-subhead th {
+    font-size: 7.5pt;
+    padding: 1.5px 4px !important;
+  }
+
+  /* Sección de Firmas Físicas al pie */
+  .print-signatures-container {
+    margin-top: 28px;
+    display: flex;
+    justify-content: space-around;
+    page-break-inside: avoid !important;
+  }
+
+  .print-signature-col {
+    width: 42%;
+    text-align: center;
+  }
+
+  .print-sign-line {
+    border-top: 1.5px solid #000000;
+    margin-bottom: 4px;
+  }
+
+  .print-sign-label {
+    font-size: 8.5pt;
+    font-weight: bold;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .print-sign-sub {
+    font-size: 7.5pt;
+    color: #222222;
+    margin: 1px 0 0 0;
+  }
+}
