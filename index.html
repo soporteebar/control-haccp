@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Administrativo HACCP | Control de Procesos y Horas Extras</title>
+  <meta name="description" content="Dashboard administrativo para control gerencial de procesos cárnicos y horas extras HACCP">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/print.css" media="print">
+  <!-- Tailwind CSS CDN para utilidades -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js para métricas del dashboard -->
+  <script src="assets/vendor/chart.umd.min.js"></script>
+  <!-- SheetJS para generación de Excel .xlsx -->
+  <script src="assets/vendor/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen">
+
+  <!-- COMPUERTA DE LOGIN EXCLUSIVA PARA EL ADMINISTRADOR Y VISOR -->
+  <div id="adminLoginOverlay" class="fixed inset-0 bg-slate-900 bg-opacity-95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 border border-slate-200">
+      <div class="text-center mb-6">
+        <img src="assets/logo-macesa.svg" alt="MACESA" class="h-12 mx-auto mb-3">
+        <h2 class="text-2xl font-black text-slate-800">Acceso al Panel</h2>
+        <p class="text-xs text-slate-500 mt-1">Control de Salida de Procesos, Horas Extras y Asistencias</p>
+      </div>
+
+      <form id="adminLoginForm" class="space-y-4">
+        <div>
+          <label for="adminUsername" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Usuario
+          </label>
+          <input type="text" id="adminUsername" required placeholder="admin o visor" autocomplete="username" class="form-control font-semibold">
+        </div>
+
+        <div>
+          <label for="adminPassword" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Contraseña
+          </label>
+          <input type="password" id="adminPassword" required placeholder="••••••••" autocomplete="current-password" class="form-control">
+        </div>
+
+        <div class="flex items-center justify-between text-xs">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-600">
+            <input type="checkbox" id="adminRemember" class="rounded text-blue-600">
+            Recordar sesión
+          </label>
+        </div>
+
+        <div class="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <span class="font-bold text-slate-800">Cuentas disponibles:</span><br>
+          
+        </div>
+
+        <div id="adminLoginError" class="hidden p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg font-medium">
+          ⚠️ Usuario o contraseña incorrectos. Verifica tus credenciales.
+        </div>
+
+        <button type="submit" class="btn btn-primary w-full py-3 font-bold text-sm shadow-md">
+          Ingresar al Sistema &rarr;
+        </button>
+      </form>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 text-center">
+        <a href="empleado.html" class="text-xs text-blue-600 hover:text-blue-800 font-semibold">
+          ¿Eres un colaborador? Ir al Portal de Empleados &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barra de Navegación Superior -->
+  <header class="top-navbar">
+    <div class="nav-container">
+      <div class="brand-wrapper">
+        <img src="assets/logo-macesa.svg" alt="MACESA" class="brand-logo-img">
+        <div>
+          <h1 class="brand-title">SISTEMA GERENCIAL HACCP</h1>
+          <p class="brand-subtitle">Control de Salida de Procesos y Horas Extras</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-3">
+        <span id="userRoleBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-800 text-blue-100 border border-blue-600 hidden sm:inline">
+          Conectado
+        </span>
+        <button type="button" id="btnAdminLogout" class="text-xs bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded shadow-sm transition-colors">
+          Cerrar Sesión
+        </button>
+        <a href="empleado.html" target="_blank" class="btn btn-secondary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 shadow-sm">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+          Portal Empleado &rarr;
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Barra de Pestañas de Navegación -->
+  <div class="bg-blue-900 border-t border-blue-800 shadow-inner">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="nav-tabs-wrapper">
+        <button class="nav-tab-btn tab-active" data-tab="tab-dashboard">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+          Dashboard & Horas Extras
+        </button>
+        <button class="nav-tab-btn tab-inactive" data-tab="tab-procesos">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+          Control de Salida de Procesos
+        </button>
+        <button class="nav-tab-btn tab-inactive" data-tab="tab-empleados">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+          Gestión de Empleados & Enlaces
+        </button>
+        <button class="nav-tab-btn tab-inactive" data-tab="tab-config">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          Google Sheets & Sincronización
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <main class="main-wrapper">
+
+    <!-- =========================================================================
+         PESTAÑA 1: DASHBOARD & HORAS EXTRAS
+         ========================================================================= -->
+    <section id="tab-dashboard" class="tab-content-section">
+
+      <!-- Tarjetas de Métricas Clave (KPIs) -->
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon-box">⏱️</div>
+          <div>
+            <div id="kpiTotalHours" class="kpi-value">0 h</div>
+            <div class="kpi-label">Horas Extras Totales</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-icon-box">📋</div>
+          <div>
+            <div id="kpiTotalRecords" class="kpi-value">0</div>
+            <div class="kpi-label">Reportes de Días</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-icon-box">👥</div>
+          <div>
+            <div id="kpiActiveEmployees" class="kpi-value">0</div>
+            <div class="kpi-label">Empleados con Horas</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-icon-box">📊</div>
+          <div>
+            <div id="kpiAverageHours" class="kpi-value">0 h</div>
+            <div class="kpi-label">Promedio por Empleado</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de Filtros por Fechas y Empleado -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label class="filter-label" for="filterEmployee">Filtrar por Empleado</label>
+          <select id="filterEmployee" class="form-control">
+            <option value="">Todos los Empleados</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="filterDateFrom">Fecha Desde</label>
+          <input type="date" id="filterDateFrom" class="form-control">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="filterDateTo">Fecha Hasta</label>
+          <input type="date" id="filterDateTo" class="form-control">
+        </div>
+        <div class="flex gap-2 items-center">
+          <button type="button" id="btnClearFilter" class="btn btn-secondary text-xs">Limpiar Filtros</button>
+          <button type="button" id="btnExportFiltered" class="btn btn-excel text-xs">
+            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M21.17 3.25Q21.5 3.25 21.75 3.5 22 3.75 22 4.08V19.92Q22 20.25 21.75 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.25 20.5 7 20.25 7 19.92V17H2.83Q2.5 17 2.25 16.75 2 16.5 2 16.17V7.83Q2 7.5 2.25 7.25 2.5 7 2.83 7H7V4.08Q7 3.75 7.25 3.5 7.5 3.25 7.83 3.25H21.17M7 15H3.5V9H7V15M20.5 4.75H8.5V19.25H20.5V4.75M16.5 12L18.5 16H16.2L15.2 13.8L14.2 16H11.9L13.9 12L12 8H14.3L15.2 10.2L16.1 8H18.4L16.5 12Z"/></svg>
+            Exportar a Excel (.xlsx)
+          </button>
+        </div>
+      </div>
+
+      <!-- Gráficos Estadísticos -->
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+              Horas Extras por Empleado
+            </h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartEmployeesCanvas"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
+              Distribución por Tipo de Proceso
+            </h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartProcessesCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla de Reportes de Horas Extras -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Registros Detallados de Horas Extras</h3>
+          <div class="flex gap-2">
+            <button type="button" id="btnExportConsolidated" class="btn btn-excel text-xs">
+              Descargar Consolidado para Nómina
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 border-b text-slate-700 font-bold">
+                <th class="py-3 px-4">Fecha / Día</th>
+                <th class="py-3 px-4">Empleado</th>
+                <th class="py-3 px-4">Horas Extras</th>
+                <th class="py-3 px-4">Proceso & Salida Planilla</th>
+                <th class="py-3 px-4">Justificación de la Actividad</th>
+                <th class="py-3 px-4 text-center">Vacaciones</th>
+                <th class="py-3 px-4 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="adminRecordsTableBody">
+              <!-- Se pobla dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- =========================================================================
+         PESTAÑA 2: CONTROL DE SALIDA DE PROCESOS (VISTA GERENCIAL - IMAGEN 1)
+         ========================================================================= -->
+    <section id="tab-procesos" class="tab-content-section hidden">
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title text-xl">Módulo de Control de Salida de Procesos</h3>
+            <p class="text-xs text-slate-500 mt-1">Monitoreo diario de los horarios de finalización de faena, despiece y logística cárnica.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="periodSelect" class="form-control text-xs font-semibold max-w-xs">
+              <!-- Opciones de períodos -->
+            </select>
+            <button type="button" id="btnNewPeriod" class="btn btn-secondary text-xs">+ Nuevo Período</button>
+            <button type="button" id="btnDeletePeriod" class="btn btn-danger text-xs" title="Eliminar el período seleccionado">
+              🗑 Eliminar Período
+            </button>
+            <button type="button" id="btnExportProcessExcel" class="btn btn-excel text-xs">
+              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M21.17 3.25Q21.5 3.25 21.75 3.5 22 3.75 22 4.08V19.92Q22 20.25 21.75 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.25 20.5 7 20.25 7 19.92V17H2.83Q2.5 17 2.25 16.75 2 16.5 2 16.17V7.83Q2 7.5 2.25 7.25 2.5 7 2.83 7H7V4.08Q7 3.75 7.25 3.5 7.5 3.25 7.83 3.25H21.17M7 15H3.5V9H7V15M20.5 4.75H8.5V19.25H20.5V4.75M16.5 12L18.5 16H16.2L15.2 13.8L14.2 16H11.9L13.9 12L12 8H14.3L15.2 10.2L16.1 8H18.4L16.5 12Z"/></svg>
+              Exportar a Excel
+            </button>
+          </div>
+        </div>
+
+        <!-- Réplica Exacta de la Tabla Física de Salida de Procesos (Imagen 1) -->
+        <div class="process-table-container">
+          <div class="table-process-header">
+            CONTROL DE SALIDA DE PROCESOS
+          </div>
+          <div id="processPeriodHeader" class="table-process-subheader">
+            Periodo: 26/09/2026 al 10/10/2026
+          </div>
+          <div class="bg-blue-50 text-blue-900 text-xs py-1.5 px-3 text-center border-b border-blue-200 italic font-medium">
+            Ingrese horas como 7:8, 6:30 o 10:05. Excel las mostrará como hh:mm.
+          </div>
+
+          <table class="process-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Fecha ▾</th>
+                <th style="width: 120px;">Día ▾</th>
+                <th style="width: 130px;">Hora Matanza ▾</th>
+                <th style="width: 130px;">Hora Víscera ▾</th>
+                <th style="width: 130px;">Hora Deshues ▾</th>
+                <th style="width: 160px;">Hora Descarga Cartón ▾</th>
+                <th>Observaciones ▾</th>
+                <th style="width: 50px;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="processTableBody">
+              <!-- Se pobla dinámicamente con filas con colores alternados -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Botones de Acción de Procesos -->
+        <div class="mt-4 flex justify-between items-center">
+          <button type="button" id="btnAddRow" class="btn btn-secondary text-xs font-bold">
+            + Agregar Fila al Período
+          </button>
+          <button type="button" id="btnSaveProcesses" class="btn btn-primary font-bold">
+            Guardar Cambios de Procesos
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- =========================================================================
+         PESTAÑA 3: GESTIÓN DE EMPLEADOS & ENLACES MÓVILES (LINK & QR)
+         ========================================================================= -->
+    <section id="tab-empleados" class="tab-content-section hidden">
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title text-xl">Gestión de Empleados y Enlaces para WhatsApp</h3>
+            <p class="text-xs text-slate-500 mt-1">Crea tus colaboradores y genera enlaces únicos para que ellos registren sus horas desde el celular sin contraseñas difíciles.</p>
+          </div>
+          <button type="button" id="btnOpenCreateEmployee" class="btn btn-primary text-xs font-bold">
+            + Crear Nuevo Empleado
+          </button>
+        </div>
+
+        <!-- Cuadrícula de Tarjetas de Empleados -->
+        <div id="employeesListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Se pobla dinámicamente -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- =========================================================================
+         PESTAÑA 4: CONFIGURACIÓN & SINCRONIZACIÓN GOOGLE SHEETS
+         ========================================================================= -->
+    <section id="tab-config" class="tab-content-section hidden">
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title text-xl">Sincronización con Google Sheets (Nube Gratuita)</h3>
+        </div>
+
+        <div class="max-w-3xl space-y-6">
+          <p class="text-sm text-slate-600">
+            Al alojar la aplicación en <strong>GitHub Pages</strong>, puedes conectar tu propia hoja de <strong>Google Sheets</strong> totalmente gratis mediante Google Apps Script. De este modo, cuando cualquier empleado llene su reporte desde su teléfono, caerá inmediatamente en tu hoja de cálculo y se reflejará aquí.
+          </p>
+
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <label for="googleSheetsUrlInput" class="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-1">
+              URL del Web App de Google Apps Script:
+            </label>
+            <input type="url" id="googleSheetsUrlInput" class="form-control font-mono text-xs" 
+              placeholder="https://script.google.com/macros/s/AKfycbx.../exec">
+            <div class="mt-3 flex gap-2">
+              <button type="button" id="btnSaveConfig" class="btn btn-primary text-xs">Guardar URL</button>
+              <button type="button" id="btnTestGoogleSheets" class="btn btn-secondary text-xs">Probar Conexión</button>
+            </div>
+          </div>
+
+          <!-- Pasos para configurar en Google Sheets -->
+          <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+            <h4 class="font-bold text-slate-800 text-sm mb-3">¿Cómo conectar tu Google Sheets en 3 minutos?</h4>
+            <ol class="list-decimal list-inside text-xs text-slate-700 space-y-2">
+              <li>Crea una hoja de cálculo nueva en <a href="https://sheets.google.com" target="_blank" class="text-blue-600 underline font-bold">Google Sheets</a> llamada <strong>"MACESA - Control HACCP"</strong>.</li>
+              <li>En el menú superior ve a: <strong>Extensiones &rarr; Apps Script</strong>.</li>
+              <li>Pega el código contenido en la carpeta <code>google-sheets/CodigoGoogleAppsScript.gs</code> del proyecto.</li>
+              <li>Haz clic en <strong>Implementar &rarr; Nueva implementación &rarr; Tipo: Aplicación web</strong>.</li>
+              <li>En <em>"Quién tiene acceso"</em> selecciona: <strong>Cualquier usuario (Anyone)</strong> y pulsa Guardar.</li>
+              <li>Copia la URL que te proporciona y pégala en el campo de arriba. ¡Listo!</li>
+            </ol>
+          </div>
+
+          <!-- Respaldo Local en JSON -->
+          <div class="pt-4 border-t border-slate-200">
+            <h4 class="font-bold text-slate-800 text-sm mb-2">Copias de Seguridad Locales (JSON)</h4>
+            <p class="text-xs text-slate-500 mb-4">Puedes descargar todos los empleados, horas y salidas de procesos en un archivo para resguardo o transferirlo a otra computadora.</p>
+            <div class="flex flex-wrap gap-3 items-center">
+              <button type="button" id="btnExportBackup" class="btn btn-secondary text-xs">
+                Descargar Copia de Seguridad (.json)
+              </button>
+              <label class="btn btn-secondary text-xs cursor-pointer">
+                Restaurar Copia (.json)
+                <input type="file" id="fileImportBackup" accept=".json" class="hidden">
+              </label>
+              <button type="button" id="btnResetFactory" class="btn btn-danger text-xs ml-auto">
+                Restablecer Datos de Ejemplo
+              </button>
+            </div>
+          </div>
+
+          <!-- Gestión de Usuarios del Panel (Administradores y Visores) -->
+          <div class="pt-4 border-t border-slate-200" id="adminUsersSection">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+              <div>
+                <h4 class="font-bold text-slate-800 text-sm">Gestión de Usuarios del Panel (Admin y Visor)</h4>
+                <p class="text-xs text-slate-500">Crea accesos separados para administradores (control total) y visores (solo reportes y Excel).</p>
+              </div>
+              <button type="button" id="btnOpenCreateAdminUser" class="btn btn-primary text-xs font-bold">
+                + Crear Usuario del Panel
+              </button>
+            </div>
+
+            <!-- Tabla de Usuarios del Sistema -->
+            <div class="overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-sm">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-slate-50 border-b text-slate-700 font-bold">
+                    <th class="py-2.5 px-4">Usuario</th>
+                    <th class="py-2.5 px-4">Nombre Completo</th>
+                    <th class="py-2.5 px-4">Rol en el Sistema</th>
+                    <th class="py-2.5 px-4">Fecha Alta</th>
+                    <th class="py-2.5 px-4 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="adminUsersTableBody">
+                  <!-- Poblar dinámicamente -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- =========================================================================
+       MODALES
+       ========================================================================= -->
+
+  <!-- Modal Crear Empleado -->
+  <div id="createEmployeeModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="font-bold text-slate-800 text-lg">Crear Nuevo Empleado</h4>
+        <button type="button" id="btnCloseCreateEmployee" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <form id="createEmployeeForm">
+        <div class="modal-body space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre Completo *</label>
+            <input type="text" id="empNewName" required placeholder="Ej: Álvaro José Sequeira Amador" class="form-control">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Código / Cédula *</label>
+              <input type="text" id="empNewCode" required placeholder="Ej: EMP-04" class="form-control">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Teléfono / WhatsApp</label>
+              <input type="text" id="empNewPhone" placeholder="Ej: +505 8888-0000" class="form-control">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Área / Proceso</label>
+              <select id="empNewArea" class="form-control">
+                <option value="Equipo HACCP">Equipo HACCP</option>
+                <option value="Matanza">Matanza</option>
+                <option value="Vísceras">Vísceras</option>
+                <option value="Deshuese">Deshuese</option>
+                <option value="Descarga de Cartón">Descarga de Cartón</option>
+                <option value="Cámara Frigorífica">Cámara Frigorífica</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Cargo / Puesto</label>
+              <input type="text" id="empNewRole" placeholder="Ej: Inspector de Calidad" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary text-xs font-bold">Guardar Empleado y Generar Enlace</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Código QR -->
+  <div id="qrModal" class="modal-overlay hidden">
+    <div class="modal-content max-w-sm text-center">
+      <div class="modal-header">
+        <h4 id="qrModalTitle" class="font-bold text-slate-800 text-base">Código QR del Colaborador</h4>
+        <button type="button" id="btnCloseQRModal" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <div class="modal-body flex flex-col items-center">
+        <p class="text-xs text-slate-500 mb-3">El empleado puede escanear este código con su teléfono para ingresar a su reporte diario:</p>
+        <div class="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <img id="qrCodeImage" src="" alt="Código QR" class="w-48 h-48">
+        </div>
+        <p id="qrModalLink" class="text-xs font-mono text-slate-600 mt-3 break-all bg-slate-50 p-2 rounded w-full"></p>
+      </div>
+      <div class="modal-footer justify-center">
+        <button type="button" onclick="window.print()" class="btn btn-secondary text-xs">Imprimir Código QR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detalle de Registro de Horas Extras -->
+  <div id="recordDetailModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="font-bold text-slate-800 text-base">Detalle de Registro de Horas Extras</h4>
+        <button type="button" id="btnCloseRecordDetail" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <div id="recordDetailContent" class="modal-body">
+        <!-- Contenido dinámico -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" onclick="document.getElementById('recordDetailModal').classList.add('hidden')" class="btn btn-secondary text-xs">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Crear / Editar Usuario del Panel (Admin o Visor) -->
+  <div id="createAdminUserModal" class="modal-overlay hidden">
+    <div class="modal-content max-w-md">
+      <div class="modal-header">
+        <h4 id="titleAdminUserModal" class="font-bold text-slate-800 text-lg">Crear Usuario del Panel</h4>
+        <button type="button" id="btnCloseCreateAdminUser" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <form id="createAdminUserForm">
+        <input type="hidden" id="adminUserEditId">
+        <div class="modal-body space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre Completo *</label>
+            <input type="text" id="adminUserFullName" required placeholder="Ej: Lic. Roberto Gómez" class="form-control text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre de Usuario (Login) *</label>
+            <input type="text" id="adminUserLoginName" required placeholder="Ej: visor2 o rgomez" class="form-control text-xs font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Contraseña *</label>
+            <input type="password" id="adminUserPassword" required placeholder="••••••••" class="form-control text-xs">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Rol de Acceso *</label>
+            <select id="adminUserRole" class="form-control text-xs font-bold">
+              <option value="visor" selected>Visor de Reportes (Solo Lectura, Exportar Excel y Consultar)</option>
+              <option value="admin">Administrador (Control Total, Crear Empleados, Editar Procesos y Ajustes)</option>
+            </select>
+            <p class="text-[11px] text-slate-500 mt-1">El usuario Visor puede ver dashboard, reportes, procesos y exportar a Excel, pero no puede modificar ni borrar datos.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary text-xs font-bold">Guardar Usuario</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/excel-export.js"></script>
+  <script src="js/procesos.js"></script>
+  <script src="js/app-admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Registro Diario de Horas Extras | Equipo HACCP</title>
+  <meta name="description" content="Portal móvil para registro de horas extras, justificación y control de asistencia">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/print.css" media="print">
+  <!-- Tailwind CSS CDN para utilidades rápidas -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS para descarga en Excel -->
+  <script src="assets/vendor/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen pb-12">
+
+  <!-- Encabezado Móvil de Identidad -->
+  <header class="top-navbar no-print">
+    <div class="nav-container">
+      <div class="brand-wrapper">
+        <img src="assets/logo-macesa.svg" alt="MACESA" class="brand-logo-img">
+        <div>
+          <h1 class="brand-title text-lg md:text-xl">EQUIPO HACCP</h1>
+          <p class="brand-subtitle text-xs">Registro de Horas Extras y Asistencia</p>
+        </div>
+      </div>
+      <div class="text-right text-xs text-blue-200">
+        <a href="index.html" class="underline hover:text-white">Panel Administrador &rarr;</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Encabezado sólo para impresión oficial física -->
+  <div class="print-header hidden">
+    <h1>MACESA - CONTROL DE CALIDAD E INOCUIDAD</h1>
+    <h2>Justificación de Horas Extras - Equipo HACCP</h2>
+    <p class="mt-2 text-sm">Formulario Oficial de Registro y Liquidación</p>
+  </div>
+
+  <main class="main-wrapper">
+
+    <!-- COMPUERTA DE VALIDACIÓN POR NÚMERO DE TELÉFONO -->
+    <div id="phoneGateCard" class="employee-mobile-card p-6 text-center shadow-lg">
+      <div class="w-16 h-16 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">
+        📱
+      </div>
+      <h2 class="text-xl font-black text-slate-800">Validación de Colaborador</h2>
+      <p class="text-xs text-slate-500 mt-1 mb-6">
+        Por seguridad y confidencialidad, ingresa tu <strong>número de teléfono registrado</strong> para acceder a tu reporte diario de horas extras HACCP:
+      </p>
+
+      <form id="phoneGateForm" class="max-w-sm mx-auto space-y-4">
+        <div>
+          <label for="inputEmployeePhone" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 text-left">
+            Número de Teléfono Celular *
+          </label>
+          <input type="tel" id="inputEmployeePhone" required placeholder="Ej: 8888-0001 ó +505 88880001" 
+            class="form-control text-center text-lg font-bold tracking-widest text-slate-800">
+          <p class="text-xs text-slate-400 mt-1 text-left">Ingresa el teléfono registrado ante Recursos Humanos / Administración.</p>
+        </div>
+
+        <div id="phoneGateError" class="hidden p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg font-medium text-left">
+          ⚠️ El número ingresado no coincide con ningún colaborador activo. Por favor comunícate con el Administrador HACCP.
+        </div>
+
+        <button type="submit" class="btn btn-primary w-full py-3 font-bold text-sm shadow">
+          Validar e Ingresar a mi Formulario &rarr;
+        </button>
+      </form>
+    </div>
+
+    <!-- Tarjeta Principal del Empleado (Sólo visible tras validación telefónica exitosa) -->
+    <div id="employeeMainContent" class="employee-mobile-card hidden">
+      
+      <!-- Ficha de Empleado Identificado -->
+      <div class="employee-badge-header">
+        <div class="inline-block bg-blue-800 bg-opacity-60 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider text-blue-100 mb-2">
+          Colaborador Autenticado
+        </div>
+        <h2 id="empHeaderName" class="text-2xl font-black tracking-tight">Colaborador</h2>
+        <p class="text-blue-100 text-sm mt-1">
+          <span id="empHeaderArea">Equipo HACCP</span> &bull; Código: <span id="empHeaderCode" class="font-mono font-bold">EMP-01</span>
+        </p>
+        <div class="mt-3">
+          <button type="button" id="btnLogoutEmployee" class="text-xs bg-blue-800 hover:bg-blue-900 text-blue-100 px-3 py-1 rounded-full border border-blue-600 transition-colors">
+            Cerrar mi sesión / Salir
+          </button>
+        </div>
+      </div>
+
+      <!-- Resumen Superior de Horas Acumuladas -->
+      <div class="bg-blue-50 border-b border-blue-100 p-4 flex items-center justify-between">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-wider text-blue-800 block">Total Acumulado del Período</span>
+          <span id="totalAccumulatedHours" class="text-3xl font-black text-blue-900">26.93 hrs</span>
+        </div>
+        <div class="text-right">
+          <span class="text-xs text-slate-500 block">Días Reportados</span>
+          <span id="totalRecordsCount" class="text-lg font-bold text-slate-700">12 días</span>
+        </div>
+      </div>
+
+      <!-- Formulario de Registro Diario -->
+      <div class="form-body-padding">
+        <div class="mb-6 pb-2 border-b border-slate-200 flex justify-between items-center">
+          <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Registrar Horas Extras de Hoy
+          </h3>
+          <span class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">Diario</span>
+        </div>
+
+        <form id="overtimeForm" class="space-y-5">
+
+          <!-- 1. Fecha del Turno -->
+          <div>
+            <label for="recordDate" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Fecha del Turno Realizado *
+            </label>
+            <input type="date" id="recordDate" required class="form-control font-medium">
+          </div>
+
+          <!-- 2. Cantidad de Horas Extras -->
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Cantidad de Horas Extras Trabajadas *
+            </label>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <span class="text-xs text-slate-500 block mb-1">Horas:</span>
+                <select id="hoursInput" class="form-control font-bold text-slate-800">
+                  <option value="0">0 horas</option>
+                  <option value="1" selected>1 hora</option>
+                  <option value="2">2 horas</option>
+                  <option value="3">3 horas</option>
+                  <option value="4">4 horas</option>
+                  <option value="5">5 horas</option>
+                  <option value="6">6 horas</option>
+                  <option value="7">7 horas</option>
+                  <option value="8">8 horas</option>
+                </select>
+              </div>
+              <div>
+                <span class="text-xs text-slate-500 block mb-1">Minutos:</span>
+                <select id="minutesInput" class="form-control font-bold text-slate-800">
+                  <option value="0">00 min</option>
+                  <option value="5">05 min</option>
+                  <option value="10">10 min</option>
+                  <option value="15">15 min</option>
+                  <option value="20">20 min</option>
+                  <option value="25" selected>25 min</option>
+                  <option value="30">30 min</option>
+                  <option value="35">35 min</option>
+                  <option value="40">40 min</option>
+                  <option value="45">45 min</option>
+                  <option value="50">50 min</option>
+                  <option value="55">55 min</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Placa de conversión en vivo -->
+            <div class="mt-3 p-2.5 bg-blue-100 rounded-lg text-xs text-blue-900 flex items-center justify-between" id="hoursCalcBadge">
+              <strong>1h y 25 minutos</strong> = <span class="font-bold text-blue-700">1.42 hrs decimal</span>
+            </div>
+          </div>
+
+          <!-- Selección de Proceso Operativo -->
+          <div>
+            <label for="processTypeInput" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Proceso o Actividad Principal *
+            </label>
+            <select id="processTypeInput" class="form-control font-bold text-slate-800 bg-white">
+              <option value="Proceso de Matanza">Proceso de Matanza</option>
+              <option value="Proceso de Vísceras">Proceso de Vísceras</option>
+              <option value="Proceso de Deshuese">Proceso de Deshuese</option>
+              <option value="Descarga de Cartón">Descarga de Cartón</option>
+              <option value="Carga">Carga y Despacho</option>
+              <option value="Apoyo Deshuese">Apoyo Deshuese</option>
+              <option value="Monitoreo HACCP">Monitoreo de Calidad / PCC HACCP</option>
+            </select>
+            <span class="text-[11px] text-slate-500 block mt-0.5">El sistema vinculará este proceso con la hora oficial de cierre en la planilla gerencial.</span>
+          </div>
+
+          <!-- 3. Justificación Detallada (>300 Palabras permitidas) -->
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label for="justificationInput" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Justificación del Tiempo Extraordinario *
+              </label>
+              <span id="wordCountDisplay" class="text-xs font-semibold text-slate-500 font-mono">0 palabras | 0 caracteres</span>
+            </div>
+
+            <!-- Barra de progreso para redacción detallada -->
+            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-2 overflow-hidden">
+              <div id="wordCountBar" class="h-1.5 rounded-full bg-amber-400 w-0 transition-all duration-300"></div>
+            </div>
+
+            <textarea id="justificationInput" required class="form-control justification-textarea" rows="4" 
+              placeholder="Describe detalladamente los motivos del tiempo extraordinario (ej. Proceso de Matanza extendido por lote tardío de ganado, inspección de puntos críticos de control HACCP, supervisión de despiece, carga de producto en cámaras refrigeradas, etc.). Puedes escribir redacciones completas de más de 300 palabras..."></textarea>
+
+            <!-- Atajos rápidos para procesos cárnicos comunes (SIN HORAS FIJAS) -->
+            <div class="mt-2">
+              <span class="text-xs text-slate-500 font-medium block mb-1">Agregar proceso rápido al texto:</span>
+              <div class="quick-tags-container">
+                <button type="button" class="btn-quick-tag" data-tag="Proceso de Matanza">+ Proceso de Matanza</button>
+                <button type="button" class="btn-quick-tag" data-tag="Proceso de Vísceras">+ Proceso de Vísceras</button>
+                <button type="button" class="btn-quick-tag" data-tag="Proceso de Deshuese">+ Proceso de Deshuese</button>
+                <button type="button" class="btn-quick-tag" data-tag="Descarga de Cartón">+ Descarga de Cartón</button>
+                <button type="button" class="btn-quick-tag" data-tag="Carga de contenedores">+ Carga de Contenedores</button>
+                <button type="button" class="btn-quick-tag" data-tag="Monitoreo PCC1 y PCC2 HACCP">+ Verificación HACCP</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Registro de Vacaciones (Como en la Imagen 2) -->
+          <div class="border border-slate-200 rounded-xl p-4 bg-slate-50">
+            <div class="flex items-center justify-between">
+              <label for="chkVacation" class="flex items-center gap-2 cursor-pointer font-bold text-slate-800 text-sm">
+                <input type="checkbox" id="chkVacation" class="w-4 h-4 text-blue-600 rounded">
+                ¿Tomaste vacaciones en este período?
+              </label>
+              <span class="text-xs text-slate-500 font-semibold">(SÍ / NO)</span>
+            </div>
+
+            <!-- Campos desplegables si marcó SÍ -->
+            <div id="vacationFields" class="hidden mt-4 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs text-slate-600 font-semibold mb-1">Fecha Desde:</label>
+                <input type="date" id="vacationFrom" class="form-control text-xs">
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 font-semibold mb-1">Fecha Hasta:</label>
+                <input type="date" id="vacationTo" class="form-control text-xs">
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 font-semibold mb-1">Cantidad de días:</label>
+                <input type="number" id="vacationDays" min="0" value="0" class="form-control text-xs font-bold">
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Firma Digital Táctil del Colaborador -->
+          <div class="border border-slate-200 rounded-xl p-4 bg-white">
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Firma Digital del Empleado *
+              </label>
+              <button type="button" id="btnClearSignature" class="text-xs text-red-600 hover:text-red-800 font-semibold">
+                Limpiar Firma
+              </button>
+            </div>
+            <p class="text-xs text-slate-500 mb-2">Firma con tu dedo en la pantalla táctil o con el ratón:</p>
+            
+            <div class="signature-wrapper">
+              <canvas id="signatureCanvas" class="signature-canvas"></canvas>
+              <div class="signature-line-guide"></div>
+            </div>
+          </div>
+
+          <!-- Botón de Guardado -->
+          <div class="pt-2">
+            <button type="submit" class="btn btn-primary w-full py-3 text-base shadow-md font-bold">
+              <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+              Guardar Reporte Diario de Horas Extras
+            </button>
+          </div>
+        </form>
+
+        <!-- Botones de Acción: Descargar Excel e Imprimir -->
+        <div class="mt-6 pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-2 no-print">
+          <button type="button" id="btnExportMyExcel" class="btn btn-excel flex-1">
+            <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 24 24"><path d="M21.17 3.25Q21.5 3.25 21.75 3.5 22 3.75 22 4.08V19.92Q22 20.25 21.75 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.25 20.5 7 20.25 7 19.92V17H2.83Q2.5 17 2.25 16.75 2 16.5 2 16.17V7.83Q2 7.5 2.25 7.25 2.5 7 2.83 7H7V4.08Q7 3.75 7.25 3.5 7.5 3.25 7.83 3.25H21.17M7 15H3.5V9H7V15M20.5 4.75H8.5V19.25H20.5V4.75M16.5 12L18.5 16H16.2L15.2 13.8L14.2 16H11.9L13.9 12L12 8H14.3L15.2 10.2L16.1 8H18.4L16.5 12Z"/></svg>
+            Descargar Mi Boleta en Excel (.xlsx)
+          </button>
+          <button type="button" id="btnPrintMySheet" class="btn btn-secondary flex-1">
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            Imprimir / Guardar PDF
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Historial de Días del Período -->
+      <div class="bg-slate-50 border-t border-slate-200 p-4 sm:p-6">
+        <h4 class="font-bold text-slate-800 text-sm uppercase tracking-wider mb-3">
+          Historial de Días Registrados en este Período
+        </h4>
+
+        <div class="overflow-x-auto bg-white rounded-lg border border-slate-200 shadow-sm">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="bg-slate-100 border-b text-slate-700 font-bold">
+                <th class="py-2.5 px-4">Fecha</th>
+                <th class="py-2.5 px-4">Horas Extras</th>
+                <th class="py-2.5 px-4">Justificación</th>
+                <th class="py-2.5 px-4 text-center no-print">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="employeeHistoryBody">
+              <!-- Se pobla dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =========================================================================
+         HOJA OFICIAL IMPRIMIBLE (Réplica exacta de la Imagen 2 para 1 hoja física)
+         Visible únicamente al imprimir (window.print() o Ctrl+P)
+         ========================================================================= -->
+     <!--   
+    <div id="officialPrintSheet" class="official-print-sheet">
+      <!-- Encabezado Oficial tipo Imagen 2 
+      <div class="print-official-header">
+        <div class="print-header-top">
+          <img src="assets/logo-macesa.svg" alt="MACESA" class="print-logo">
+          <div class="print-title-box">
+            <h1 class="print-title">Justificación de Horas Extras- Equipo HACCP</h1>
+          </div>
+          <div class="print-date-box">
+            <span>Fecha: <strong id="printHeaderDate">____/____/________</strong></span>
+          </div>
+        </div>
+
+        <div class="print-employee-info">
+          <div class="print-info-row">
+            <span>Nombre: <strong id="printEmpName">Álvaro José Sequeira Amador</strong></span>
+            <span>Código: <strong id="printEmpCode">EMP-01</strong></span>
+            <span>Área: <strong id="printEmpArea">Equipo HACCP</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla Principal de Horas Extras 
+      <table class="print-table print-overtime-table">
+        <thead>
+          <tr>
+            <th style="width: 14%;">FECHA</th>
+            <th style="width: 26%;">CANTIDAD DE HORAS EXTRAS</th>
+            <th style="width: 60%;">JUSTIFICACIÓN</th>
+          </tr>
+        </thead>
+        <tbody id="printOvertimeBody">
+          --> 
+          <!-- Filas dinámicas 
+        <tfoot>
+          <tr class="print-total-row">
+            <td><strong>TOTAL DE HORAS:</strong></td>
+            <td id="printTotalHoursCell"><strong>0.00 H</strong></td>
+            <td id="printTotalWordsCell"></td>
+          </tr>
+        </tfoot>
+      </table>--> 
+
+      <!-- Tabla de Vacaciones (Exacta como Imagen 2) 
+      <div class="print-vacations-section">
+        <table class="print-table print-vacation-table">
+          <thead>
+            <tr>
+              <th colspan="2" style="width: 28%;">¿Vacaciones tomadas?</th>
+              <th colspan="2" style="width: 44%;">Fecha</th>
+              <th style="width: 28%;">Cantidad de dias</th>
+            </tr>
+            <tr class="print-subhead">
+              <th style="width: 14%;">SI</th>
+              <th style="width: 14%;">NO</th>
+              <th style="width: 22%;">De :</th>
+              <th style="width: 22%;">hasta:</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="printVacationsBody">
+            <tr>
+              <td id="printVacSi" class="text-center font-bold"></td>
+              <td id="printVacNo" class="text-center font-bold">X</td>
+              <td id="printVacFrom" class="text-center">-</td>
+              <td id="printVacTo" class="text-center">-</td>
+              <td id="printVacDays" class="text-center">0</td>
+            </tr>
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>--> 
+
+      <!-- Sección de Firma Física al pie de página 
+      <div class="print-signatures-container">
+        <div class="print-signature-col">
+          <div class="print-sign-line"></div>
+          <p class="print-sign-label">Firma del Empleado</p>
+          <p class="print-sign-sub" id="printSignEmpName">Álvaro José Sequeira Amador</p>
+        </div>
+        <div class="print-signature-col">
+          <div class="print-sign-line"></div>
+          <p class="print-sign-label">Firma Supervisor / Responsable HACCP</p>
+          <p class="print-sign-sub">Revisado y Aprobado</p>
+        </div>
+      </div>--> 
+    </div>
+
+  </main>
+
+  <!-- Toast Flotante de Éxito -->
+  <div id="successToast" class="toast-success hidden">
+    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+    <div>
+      <h5 class="text-sm font-bold">¡Reporte Diario Guardado!</h5>
+      <p class="text-xs text-emerald-100">Las horas se han acumulado y respaldado correctamente.</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/excel-export.js"></script>
+  <script src="js/app-empleado.js"></script>
+</body>
+</html>
