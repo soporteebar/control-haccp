@@ -83,6 +83,11 @@
         <span id="userRoleBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-800 text-blue-100 border border-blue-600 hidden sm:inline">
           Conectado
         </span>
+        <button type="button" id="btnPullSheetsHeader" class="btn btn-secondary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 shadow-sm" title="Consultar las 4 hojas de Google Sheets y refrescar los datos">
+          <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span class="hidden sm:inline">📥 Cargar de Google Sheets</span>
+          <span class="sm:hidden">📥 Nube</span>
+        </button>
         <button type="button" id="btnAdminLogout" class="text-xs bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded shadow-sm transition-colors">
           Cerrar Sesión
         </button>
@@ -213,8 +218,11 @@
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">Registros Detallados de Horas Extras</h3>
-          <div class="flex gap-2">
-            <button type="button" id="btnExportConsolidated" class="btn btn-excel text-xs">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="btnOpenCreateRecord" class="btn btn-primary text-xs font-bold">
+              + Nuevo Registro
+            </button>
+            <button type="button" id="btnExportConsolidated" class="btn btn-excel text-xs font-bold">
               Descargar Consolidado para Nómina
             </button>
           </div>
@@ -366,24 +374,31 @@
             <div class="mt-3 flex flex-wrap gap-2">
               <button type="button" id="btnSaveConfig" class="btn btn-primary text-xs font-bold">Guardar URL</button>
               <button type="button" id="btnTestGoogleSheets" class="btn btn-secondary text-xs font-bold">Probar Conexión</button>
-              <button type="button" id="btnSyncAllToSheets" class="btn btn-excel text-xs font-bold" title="Alimentar todos los empleados, horas extras y procesos a Google Sheets">
+              <button type="button" id="btnPullFromSheets" class="btn btn-secondary text-xs font-bold" title="Consultar las 4 hojas de Google Sheets y actualizar los datos locales">
+                📥 Cargar / Refrescar desde Google Sheets
+              </button>
+              <button type="button" id="btnSyncAllToSheets" class="btn btn-excel text-xs font-bold" title="Alimentar todos los empleados, horas extras, procesos y usuarios a Google Sheets">
                 🚀 Sincronizar TODO a Google Sheets
               </button>
             </div>
 
-            <!-- Resumen de las 3 hojas que se alimentan -->
-            <div class="mt-4 pt-3 border-t border-blue-200 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <!-- Resumen de las 4 hojas que realizan CRUD -->
+            <div class="mt-4 pt-3 border-t border-blue-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
               <div class="bg-white p-2.5 rounded-lg border border-blue-100 shadow-xs">
                 <span class="font-bold text-blue-900 block">1. Empleados_Enlaces</span>
-                <span class="text-slate-500 text-[11px]">Directorio, cédulas y enlaces para WhatsApp.</span>
+                <span class="text-slate-500 text-[11px]">Directorio, cédulas, enlaces web y directos de WhatsApp.</span>
               </div>
               <div class="bg-white p-2.5 rounded-lg border border-blue-100 shadow-xs">
                 <span class="font-bold text-indigo-900 block">2. HorasExtras_HACCP</span>
-                <span class="text-slate-500 text-[11px]">Registros diarios, horas decimales y firmas.</span>
+                <span class="text-slate-500 text-[11px]">Registros diarios, horas decimales, justificación y firma.</span>
               </div>
               <div class="bg-white p-2.5 rounded-lg border border-blue-100 shadow-xs">
                 <span class="font-bold text-emerald-900 block">3. SalidaProcesos</span>
-                <span class="text-slate-500 text-[11px]">Horas de corte (Matanza, Deshuese, etc.).</span>
+                <span class="text-slate-500 text-[11px]">Control gerencial de horarios (Matanza, Deshuese, etc.).</span>
+              </div>
+              <div class="bg-white p-2.5 rounded-lg border border-blue-100 shadow-xs">
+                <span class="font-bold text-amber-900 block">4. Usuarios_Panel</span>
+                <span class="text-slate-500 text-[11px]">Cuentas de acceso para Administradores y Visores.</span>
               </div>
             </div>
           </div>
@@ -460,14 +475,15 @@
        MODALES
        ========================================================================= -->
 
-  <!-- Modal Crear Empleado -->
+  <!-- Modal Crear / Editar Empleado -->
   <div id="createEmployeeModal" class="modal-overlay hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h4 class="font-bold text-slate-800 text-lg">Crear Nuevo Empleado</h4>
+        <h4 id="titleEmployeeModal" class="font-bold text-slate-800 text-lg">Crear Nuevo Empleado</h4>
         <button type="button" id="btnCloseCreateEmployee" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
       </div>
       <form id="createEmployeeForm">
+        <input type="hidden" id="empEditId">
         <div class="modal-body space-y-4">
           <div>
             <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre Completo *</label>
@@ -500,9 +516,95 @@
               <input type="text" id="empNewRole" placeholder="Ej: Inspector de Calidad" class="form-control">
             </div>
           </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Estado</label>
+            <select id="empNewActive" class="form-control font-bold">
+              <option value="true" selected>ACTIVO (Puede registrar horas)</option>
+              <option value="false">INACTIVO (Desactivado)</option>
+            </select>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="submit" class="btn btn-primary text-xs font-bold">Guardar Empleado y Generar Enlace</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Crear / Editar Registro de Horas Extras -->
+  <div id="recordModal" class="modal-overlay hidden">
+    <div class="modal-content max-w-lg">
+      <div class="modal-header">
+        <h4 id="titleRecordModal" class="font-bold text-slate-800 text-lg">Registrar Horas Extras</h4>
+        <button type="button" id="btnCloseRecordModal" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <form id="recordForm">
+        <input type="hidden" id="recordEditId">
+        <div class="modal-body space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Empleado *</label>
+              <select id="recordEditEmployee" required class="form-control text-xs font-bold">
+                <!-- Se pobla dinámicamente -->
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Fecha del Turno *</label>
+              <input type="date" id="recordEditDate" required class="form-control text-xs">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Horas Extras</label>
+              <input type="number" id="recordEditHours" min="0" max="24" value="1" class="form-control text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Minutos</label>
+              <input type="number" id="recordEditMinutes" min="0" max="59" step="5" value="0" class="form-control text-xs">
+            </div>
+            <div class="col-span-2 sm:col-span-1">
+              <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Proceso Cárnico</label>
+              <select id="recordEditProcess" class="form-control text-xs">
+                <option value="Proceso de Matanza">Matanza</option>
+                <option value="Proceso de Vísceras">Vísceras</option>
+                <option value="Proceso de Deshuese">Deshuese</option>
+                <option value="Descarga de Cartón">Descarga de Cartón</option>
+                <option value="Carga">Carga</option>
+                <option value="Monitoreo HACCP">Monitoreo HACCP</option>
+                <option value="General">General / Varios</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Justificación Detallada *</label>
+            <textarea id="recordEditJustification" rows="4" required class="form-control text-xs" placeholder="Describa los puntos críticos, inspección o tareas realizadas..."></textarea>
+          </div>
+
+          <div class="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer font-bold text-amber-900 text-xs">
+              <input type="checkbox" id="recordEditHadVacation" class="w-4 h-4 text-amber-600 rounded">
+              ¿Tomó Vacaciones en esta Fecha o Período?
+            </label>
+            <div id="recordVacationFields" class="hidden grid grid-cols-3 gap-2 pt-2 border-t border-amber-200">
+              <div>
+                <label class="block text-[11px] font-bold text-amber-800 uppercase">Desde</label>
+                <input type="date" id="recordEditVacFrom" class="form-control text-xs">
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-amber-800 uppercase">Hasta</label>
+                <input type="date" id="recordEditVacTo" class="form-control text-xs">
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-amber-800 uppercase">Días</label>
+                <input type="number" id="recordEditVacDays" min="0" class="form-control text-xs" placeholder="0">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary text-xs font-bold">Guardar Registro en Sistema y Sheets</button>
         </div>
       </form>
     </div>

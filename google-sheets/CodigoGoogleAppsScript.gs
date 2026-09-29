@@ -2,13 +2,15 @@
  * ==============================================================================
  * CodigoGoogleAppsScript.gs - Conector de Google Sheets para Sistema HACCP MACESA
  * ==============================================================================
- * Este script se coloca en Google Apps Script dentro de tu hoja de cálculo.
- * Centraliza y alimenta en tiempo real:
- * 1. Directorio de Empleados y Enlaces directos para WhatsApp (Empleados_Enlaces)
- * 2. Registros diarios de Horas Extras y Justificaciones (HorasExtras_HACCP)
- * 3. Planilla de Control de Salida de Procesos (SalidaProcesos)
+ * Centraliza en Google Sheets con operaciones completas de CRUD (Crear, Leer,
+ * Actualizar y Eliminar) los 4 módulos del sistema:
+ * 1. Gestión de Empleados y Enlaces para WhatsApp (Hoja: Empleados_Enlaces)
+ * 2. Registros Detallados de Horas Extras (Hoja: HorasExtras_HACCP)
+ * 3. Módulo de Control de Salida de Procesos (Hoja: SalidaProcesos)
+ * 4. Gestión de Usuarios del Panel Admin y Visor (Hoja: Usuarios_Panel)
  */
 
+// Inicializa las 4 hojas con sus encabezados y estilos corporativos si no existen
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -34,7 +36,7 @@ function setupSheets() {
     sheetEmployees.setFrozenRows(1);
   }
 
-  // 2. Hoja de Horas Extras HACCP
+  // 2. Hoja de Registros Detallados de Horas Extras HACCP
   let sheetOvertime = ss.getSheetByName("HorasExtras_HACCP");
   if (!sheetOvertime) {
     sheetOvertime = ss.insertSheet("HorasExtras_HACCP");
@@ -54,7 +56,8 @@ function setupSheets() {
       "Vacaciones Hasta",
       "Días Vacaciones",
       "Tiene Firma Digital",
-      "Fecha / Hora Registro"
+      "Fecha / Hora Registro",
+      "ID Empleado"
     ];
     sheetOvertime.appendRow(headers);
     const range = sheetOvertime.getRange(1, 1, 1, headers.length);
@@ -62,12 +65,13 @@ function setupSheets() {
     sheetOvertime.setFrozenRows(1);
   }
 
-  // 3. Hoja de Salida de Procesos
+  // 3. Hoja de Módulo de Control de Salida de Procesos
   let sheetProcesses = ss.getSheetByName("SalidaProcesos");
   if (!sheetProcesses) {
     sheetProcesses = ss.insertSheet("SalidaProcesos");
     const headers = [
-      "Período",
+      "ID Período",
+      "Título Período",
       "Fecha",
       "Día",
       "Hora Matanza",
@@ -82,63 +86,133 @@ function setupSheets() {
     range.setBackground("#059669").setFontColor("#ffffff").setFontWeight("bold");
     sheetProcesses.setFrozenRows(1);
   }
+
+  // 4. Hoja de Gestión de Usuarios del Panel (Admin y Visor)
+  let sheetUsers = ss.getSheetByName("Usuarios_Panel");
+  if (!sheetUsers) {
+    sheetUsers = ss.insertSheet("Usuarios_Panel");
+    const headers = [
+      "ID Usuario",
+      "Nombre de Usuario (Login)",
+      "Contraseña",
+      "Nombre Completo",
+      "Rol (admin / visor)",
+      "Fecha Alta",
+      "Estado"
+    ];
+    sheetUsers.appendRow(headers);
+    const range = sheetUsers.getRange(1, 1, 1, headers.length);
+    range.setBackground("#b45309").setFontColor("#ffffff").setFontWeight("bold");
+    sheetUsers.setFrozenRows(1);
+
+    // Usuarios iniciales por defecto
+    sheetUsers.appendRow(["adm_01", "admin", "Admin25#", "Administrador General", "admin", "2026-08-01", "ACTIVO"]);
+    sheetUsers.appendRow(["adm_02", "visor", "VisorDM", "Supervisor / Visor de Reportes", "visor", "2026-08-01", "ACTIVO"]);
+  }
 }
 
+/**
+ * Manejador principal para peticiones POST (Crear, Actualizar, Eliminar y Leer todo)
+ */
 function doPost(e) {
   try {
     setupSheets();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // Obtener datos enviados desde la aplicación web
-    const postData = e.postData.contents;
+    // Obtener datos enviados desde la aplicación cliente
+    let postData = "{}";
+    if (e && e.postData && e.postData.contents) {
+      postData = e.postData.contents;
+    }
     const data = JSON.parse(postData);
+    const action = data.action || "";
     const now = new Date().toLocaleString();
 
     // =========================================================================
-    // ACCIÓN 1: Guardar o actualizar un empleado individual con enlace WhatsApp
+    // ACCIÓN: READ / GET_ALL_DATA (Lectura completa de los 4 módulos)
     // =========================================================================
-    if (data.action === "save_employee") {
+    if (action === "get_all_data" || action === "read") {
+      const fullData = readAllDataFromSpreadsheet(ss);
+      return createJsonResponse({
+        status: "success",
+        timestamp: now,
+        ...fullData
+      });
+    }
+
+    // =========================================================================
+    // MÓDULO 1: GESTIÓN DE EMPLEADOS Y ENLACES WHATSAPP (CRUD)
+    // =========================================================================
+    
+    // 1.1 CREATE / UPDATE: Guardar o actualizar un empleado individual
+    if (action === "save_employee") {
       const sheet = ss.getSheetByName("Empleados_Enlaces");
       const values = sheet.getDataRange().getValues();
       let rowIndex = -1;
 
-      // Buscar si ya existe por ID o Código
+      const targetId = (data.id || "").toString().trim();
+      const targetCode = (data.code || "").toString().trim();
+
       for (let i = 1; i < values.length; i++) {
-        if (values[i][0] === data.id || (data.code && values[i][1] === data.code)) {
+        const rowId = (values[i][0] || "").toString().trim();
+        const rowCode = (values[i][1] || "").toString().trim();
+        if ((targetId && rowId === targetId) || (targetCode && rowCode === targetCode)) {
           rowIndex = i + 1;
           break;
         }
       }
 
       const rowData = [
-        data.id || "emp_" + new Date().getTime(),
-        data.code || "",
+        targetId || "emp_" + new Date().getTime(),
+        targetCode,
         data.name || "",
         data.area || "Equipo HACCP",
         data.role || "Inspector de Calidad",
         data.phone || "",
         data.webUrl || "",
         data.whatsappUrl || "",
-        data.active || "ACTIVO",
+        data.active !== false && data.active !== "INACTIVO" ? "ACTIVO" : "INACTIVO",
         now
       ];
 
       if (rowIndex > 0) {
-        // Actualizar fila existente
         sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
       } else {
-        // Nueva fila
         sheet.appendRow(rowData);
       }
 
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empleado guardado en Google Sheets" }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return createJsonResponse({
+        status: "success",
+        message: "Empleado guardado en Google Sheets",
+        id: rowData[0]
+      });
     }
 
-    // =========================================================================
-    // ACCIÓN 2: Sincronizar directorio completo de empleados con enlaces
-    // =========================================================================
-    if (data.action === "sync_all_employees" && Array.isArray(data.employees)) {
+    // 1.2 DELETE: Eliminar empleado
+    if (action === "delete_employee") {
+      const sheet = ss.getSheetByName("Empleados_Enlaces");
+      const values = sheet.getDataRange().getValues();
+      const targetId = (data.id || "").toString().trim();
+      let deleted = false;
+
+      for (let i = values.length - 1; i >= 1; i--) {
+        const rowId = (values[i][0] || "").toString().trim();
+        if (rowId === targetId) {
+          sheet.deleteRow(i + 1);
+          deleted = true;
+          break;
+        }
+      }
+
+      return createJsonResponse({
+        status: "success",
+        deleted: deleted,
+        message: deleted ? "Empleado eliminado de Google Sheets" : "Empleado no encontrado"
+      });
+    }
+
+    // 1.3 SYNC ALL EMPLOYEES: Reemplazo masivo de empleados
+    if (action === "sync_all_employees" && Array.isArray(data.employees)) {
       const sheet = ss.getSheetByName("Empleados_Enlaces");
       const lastRow = sheet.getLastRow();
       if (lastRow > 1) {
@@ -147,7 +221,7 @@ function doPost(e) {
 
       data.employees.forEach(emp => {
         sheet.appendRow([
-          emp.id || "",
+          emp.id || "emp_" + new Date().getTime(),
           emp.code || "",
           emp.name || "",
           emp.area || "Equipo HACCP",
@@ -155,39 +229,41 @@ function doPost(e) {
           emp.phone || "",
           emp.webUrl || "",
           emp.whatsappUrl || "",
-          emp.active || "ACTIVO",
+          emp.active !== false && emp.active !== "INACTIVO" ? "ACTIVO" : "INACTIVO",
           now
         ]);
       });
 
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", count: data.employees.length, message: "Directorio de empleados actualizado" }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return createJsonResponse({
+        status: "success",
+        count: data.employees.length,
+        message: "Directorio de empleados sincronizado completamente"
+      });
     }
 
     // =========================================================================
-    // ACCIÓN 3: Marcar empleado como Inactivo
+    // MÓDULO 2: REGISTROS DETALLADOS DE HORAS EXTRAS (CRUD)
     // =========================================================================
-    if (data.action === "delete_employee") {
-      const sheet = ss.getSheetByName("Empleados_Enlaces");
+
+    // 2.1 CREATE / UPDATE: Guardar o actualizar registro de horas extras
+    if (action === "save_record" || action === "add_overtime") {
+      const sheet = ss.getSheetByName("HorasExtras_HACCP");
       const values = sheet.getDataRange().getValues();
-      for (let i = 1; i < values.length; i++) {
-        if (values[i][0] === data.id) {
-          sheet.getRange(i + 1, 9).setValue("INACTIVO");
-          sheet.getRange(i + 1, 10).setValue(now);
-          break;
+      let rowIndex = -1;
+      const targetId = (data.id || "").toString().trim();
+
+      if (targetId) {
+        for (let i = 1; i < values.length; i++) {
+          const rowId = (values[i][0] || "").toString().trim();
+          if (rowId === targetId) {
+            rowIndex = i + 1;
+            break;
+          }
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empleado marcado inactivo" }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
 
-    // =========================================================================
-    // ACCIÓN 4: Registro diario de Horas Extras enviado por el empleado
-    // =========================================================================
-    if (data.action === "add_overtime") {
-      const sheet = ss.getSheetByName("HorasExtras_HACCP");
-      sheet.appendRow([
-        data.id || "rec_" + new Date().getTime(),
+      const rowData = [
+        targetId || "rec_" + new Date().getTime(),
         data.date || "",
         data.employeeName || "",
         data.employeeCode || "",
@@ -195,30 +271,78 @@ function doPost(e) {
         data.processType || "General",
         data.processExitTime || "-",
         data.hoursText || "",
-        data.decimalHours || 0,
+        parseFloat(data.decimalHours) || 0,
         data.justification || "",
-        data.hadVacation || "NO",
+        data.hadVacation ? "SÍ" : "NO",
         data.vacationFrom || "",
         data.vacationTo || "",
-        data.vacationDays || 0,
+        parseInt(data.vacationDays, 10) || 0,
         data.hasSignature ? "SÍ" : "NO",
-        data.timestamp || now
-      ]);
+        data.timestamp || now,
+        data.employeeId || ""
+      ];
 
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Registro de horas guardado" }))
-        .setMimeType(ContentService.MimeType.JSON);
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        sheet.appendRow(rowData);
+      }
+
+      return createJsonResponse({
+        status: "success",
+        message: "Registro de horas extras guardado en Google Sheets",
+        id: rowData[0]
+      });
+    }
+
+    // 2.2 DELETE: Eliminar un registro de horas extras por ID
+    if (action === "delete_record") {
+      const sheet = ss.getSheetByName("HorasExtras_HACCP");
+      const values = sheet.getDataRange().getValues();
+      const targetId = (data.id || "").toString().trim();
+      let deleted = false;
+
+      for (let i = values.length - 1; i >= 1; i--) {
+        const rowId = (values[i][0] || "").toString().trim();
+        if (rowId === targetId) {
+          sheet.deleteRow(i + 1);
+          deleted = true;
+          break;
+        }
+      }
+
+      return createJsonResponse({
+        status: "success",
+        deleted: deleted,
+        message: deleted ? "Registro de horas eliminado de Google Sheets" : "Registro no encontrado"
+      });
     }
 
     // =========================================================================
-    // ACCIÓN 5: Guardado del Control de Salida de Procesos
+    // MÓDULO 3: CONTROL DE SALIDA DE PROCESOS (CRUD)
     // =========================================================================
-    if (data.action === "save_process_control") {
-      const sheet = ss.getSheetByName("SalidaProcesos");
-      const periodTitle = data.periodTitle || "General";
 
-      if (data.rows && data.rows.length > 0) {
+    // 3.1 CREATE / UPDATE: Guardar o actualizar filas de un período de procesos
+    if (action === "save_process_control") {
+      const sheet = ss.getSheetByName("SalidaProcesos");
+      const periodId = (data.periodId || "").toString().trim();
+      const periodTitle = (data.periodTitle || "General").toString().trim();
+
+      // Eliminar filas previas del mismo período para actualizar limpiamente
+      const values = sheet.getDataRange().getValues();
+      for (let i = values.length - 1; i >= 1; i--) {
+        const rowPeriodId = (values[i][0] || "").toString().trim();
+        const rowPeriodTitle = (values[i][1] || "").toString().trim();
+        if ((periodId && rowPeriodId === periodId) || (periodTitle && rowPeriodTitle === periodTitle)) {
+          sheet.deleteRow(i + 1);
+        }
+      }
+
+      // Insertar las filas actualizadas
+      if (Array.isArray(data.rows) && data.rows.length > 0) {
         data.rows.forEach(r => {
           sheet.appendRow([
+            periodId || periodTitle,
             periodTitle,
             r.date || "",
             r.day || "",
@@ -232,21 +356,130 @@ function doPost(e) {
         });
       }
 
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Salida de procesos guardada" }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return createJsonResponse({
+        status: "success",
+        message: "Control de Salida de Procesos guardado en Google Sheets",
+        periodId: periodId
+      });
+    }
+
+    // 3.2 DELETE: Eliminar un período completo de procesos
+    if (action === "delete_process_period") {
+      const sheet = ss.getSheetByName("SalidaProcesos");
+      const periodId = (data.periodId || "").toString().trim();
+      const periodTitle = (data.periodTitle || "").toString().trim();
+      let deletedCount = 0;
+
+      const values = sheet.getDataRange().getValues();
+      for (let i = values.length - 1; i >= 1; i--) {
+        const rowPeriodId = (values[i][0] || "").toString().trim();
+        const rowPeriodTitle = (values[i][1] || "").toString().trim();
+        if ((periodId && rowPeriodId === periodId) || (periodTitle && rowPeriodTitle === periodTitle)) {
+          sheet.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+
+      return createJsonResponse({
+        status: "success",
+        deletedCount: deletedCount,
+        message: `Se eliminaron ${deletedCount} filas del período en Google Sheets`
+      });
     }
 
     // =========================================================================
-    // ACCIÓN 6: Sincronización masiva de TODO el sistema
+    // MÓDULO 4: GESTIÓN DE USUARIOS DEL PANEL (ADMIN Y VISOR) (CRUD)
     // =========================================================================
-    if (data.action === "sync_all_data") {
+
+    // 4.1 CREATE / UPDATE: Guardar o actualizar usuario del panel
+    if (action === "save_admin_user") {
+      const sheet = ss.getSheetByName("Usuarios_Panel");
+      const values = sheet.getDataRange().getValues();
+      let rowIndex = -1;
+
+      const targetId = (data.id || "").toString().trim();
+      const targetUser = (data.username || "").toString().trim().toLowerCase();
+
+      for (let i = 1; i < values.length; i++) {
+        const rowId = (values[i][0] || "").toString().trim();
+        const rowUser = (values[i][1] || "").toString().trim().toLowerCase();
+        if ((targetId && rowId === targetId) || (targetUser && rowUser === targetUser)) {
+          rowIndex = i + 1;
+          break;
+        }
+      }
+
+      const existingPass = rowIndex > 0 ? values[rowIndex - 1][2] : "";
+      const rowData = [
+        targetId || "adm_" + new Date().getTime(),
+        targetUser,
+        data.password ? data.password : existingPass,
+        data.name || data.username || "Usuario",
+        data.role || "visor",
+        data.createdAt || now,
+        "ACTIVO"
+      ];
+
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        sheet.appendRow(rowData);
+      }
+
+      return createJsonResponse({
+        status: "success",
+        message: "Usuario del panel guardado en Google Sheets",
+        id: rowData[0]
+      });
+    }
+
+    // 4.2 DELETE: Eliminar un usuario del panel
+    if (action === "delete_admin_user") {
+      const sheet = ss.getSheetByName("Usuarios_Panel");
+      const values = sheet.getDataRange().getValues();
+      const targetId = (data.id || "").toString().trim();
+      const targetUser = (data.username || "").toString().trim().toLowerCase();
+      let deleted = false;
+
+      for (let i = values.length - 1; i >= 1; i--) {
+        const rowId = (values[i][0] || "").toString().trim();
+        const rowUser = (values[i][1] || "").toString().trim().toLowerCase();
+        if ((targetId && rowId === targetId) || (targetUser && rowUser === targetUser)) {
+          sheet.deleteRow(i + 1);
+          deleted = true;
+          break;
+        }
+      }
+
+      return createJsonResponse({
+        status: "success",
+        deleted: deleted,
+        message: deleted ? "Usuario del panel eliminado de Google Sheets" : "Usuario no encontrado"
+      });
+    }
+
+    // =========================================================================
+    // ACCIÓN MASIVA: Sincronización masiva de TODO el sistema a Google Sheets
+    // =========================================================================
+    if (action === "sync_all_data") {
       // 1. Empleados
       if (Array.isArray(data.employees)) {
         const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
         const lastRowEmp = sheetEmp.getLastRow();
         if (lastRowEmp > 1) sheetEmp.deleteRows(2, lastRowEmp - 1);
         data.employees.forEach(emp => {
-          sheetEmp.appendRow([emp.id, emp.code, emp.name, emp.area, emp.role, emp.phone, emp.webUrl, emp.whatsappUrl, emp.active || "ACTIVO", now]);
+          sheetEmp.appendRow([
+            emp.id,
+            emp.code,
+            emp.name,
+            emp.area,
+            emp.role,
+            emp.phone,
+            emp.webUrl,
+            emp.whatsappUrl,
+            emp.active || "ACTIVO",
+            now
+          ]);
         });
       }
 
@@ -257,7 +490,18 @@ function doPost(e) {
         if (lastRowProc > 1) sheetProc.deleteRows(2, lastRowProc - 1);
         data.processControls.forEach(p => {
           (p.rows || []).forEach(r => {
-            sheetProc.appendRow([p.periodTitle, r.date, r.day, r.horaMatanza, r.horaViscera, r.horaDeshuese, r.horaDescargaCarton, r.observaciones, now]);
+            sheetProc.appendRow([
+              p.periodId || p.periodTitle,
+              p.periodTitle,
+              r.date,
+              r.day,
+              r.horaMatanza,
+              r.horaViscera,
+              r.horaDeshuese,
+              r.horaDescargaCarton,
+              r.observaciones,
+              now
+            ]);
           });
         });
       }
@@ -268,33 +512,230 @@ function doPost(e) {
         const lastRowOt = sheetOt.getLastRow();
         if (lastRowOt > 1) sheetOt.deleteRows(2, lastRowOt - 1);
         data.records.forEach(r => {
-          sheetOt.appendRow([r.id, r.date, r.employeeName, r.employeeCode, r.area, r.processType || "General", r.processExitTime || "-", r.hoursText, r.decimalHours, r.justification, r.hadVacation, r.vacationFrom, r.vacationTo, r.vacationDays, r.hasSignature, r.timestamp]);
+          sheetOt.appendRow([
+            r.id,
+            r.date,
+            r.employeeName,
+            r.employeeCode,
+            r.area,
+            r.processType || "General",
+            r.processExitTime || "-",
+            r.hoursText,
+            r.decimalHours,
+            r.justification,
+            r.hadVacation,
+            r.vacationFrom,
+            r.vacationTo,
+            r.vacationDays,
+            r.hasSignature,
+            r.timestamp,
+            r.employeeId || ""
+          ]);
         });
       }
 
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Todo el sistema fue sincronizado a Google Sheets" }))
-        .setMimeType(ContentService.MimeType.JSON);
+      // 4. Usuarios del panel
+      if (Array.isArray(data.adminUsers)) {
+        const sheetUsr = ss.getSheetByName("Usuarios_Panel");
+        const lastRowUsr = sheetUsr.getLastRow();
+        if (lastRowUsr > 1) sheetUsr.deleteRows(2, lastRowUsr - 1);
+        data.adminUsers.forEach(u => {
+          sheetUsr.appendRow([
+            u.id,
+            u.username,
+            u.password,
+            u.name,
+            u.role,
+            u.createdAt || now,
+            "ACTIVO"
+          ]);
+        });
+      }
+
+      return createJsonResponse({
+        status: "success",
+        message: "Todo el sistema fue sincronizado a Google Sheets exitosamente"
+      });
     }
 
     // Ping o prueba de conexión
-    return ContentService.createTextOutput(JSON.stringify({
+    return createJsonResponse({
       status: "success",
       message: "Conexión establecida correctamente con Google Sheets",
-      sheets: ["Empleados_Enlaces", "HorasExtras_HACCP", "SalidaProcesos"],
+      sheets: ["Empleados_Enlaces", "HorasExtras_HACCP", "SalidaProcesos", "Usuarios_Panel"],
       timestamp: now
-    })).setMimeType(ContentService.MimeType.JSON);
+    });
 
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return createJsonResponse({ status: "error", error: error.toString() });
   }
 }
 
+/**
+ * Manejador para peticiones GET (Lectura y verificación de estado en navegador)
+ */
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({
-    status: "online",
-    system: "MACESA HACCP API",
-    version: "3.0",
-    modules: ["Empleados y Enlaces WhatsApp", "Horas Extras HACCP", "Salida de Procesos"]
-  })).setMimeType(ContentService.MimeType.JSON);
+  try {
+    setupSheets();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const action = e && e.parameter ? (e.parameter.action || "") : "";
+
+    if (action === "get_all_data" || action === "read") {
+      const fullData = readAllDataFromSpreadsheet(ss);
+      return createJsonResponse({
+        status: "success",
+        timestamp: new Date().toLocaleString(),
+        ...fullData
+      });
+    }
+
+    return createJsonResponse({
+      status: "online",
+      system: "MACESA HACCP API",
+      version: "4.0",
+      modules: [
+        "Gestión de Empleados y Enlaces WhatsApp",
+        "Registros Detallados de Horas Extras",
+        "Módulo de Control de Salida de Procesos",
+        "Gestión de Usuarios del Panel (Admin y Visor)"
+      ],
+      capabilities: ["CREATE", "READ", "UPDATE", "DELETE"]
+    });
+  } catch (error) {
+    return createJsonResponse({ status: "error", error: error.toString() });
+  }
+}
+
+/**
+ * Lee y estructura todos los datos de las 4 hojas de cálculo
+ */
+function readAllDataFromSpreadsheet(ss) {
+  // 1. Empleados
+  const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
+  const employees = [];
+  if (sheetEmp && sheetEmp.getLastRow() > 1) {
+    const vals = sheetEmp.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      const r = vals[i];
+      if (r[0] || r[2]) {
+        employees.push({
+          id: String(r[0] || ""),
+          code: String(r[1] || ""),
+          name: String(r[2] || ""),
+          area: String(r[3] || "Equipo HACCP"),
+          role: String(r[4] || "Inspector"),
+          phone: String(r[5] || ""),
+          webUrl: String(r[6] || ""),
+          whatsappUrl: String(r[7] || ""),
+          active: String(r[8]).toUpperCase() !== "INACTIVO",
+          createdAt: String(r[9] || "")
+        });
+      }
+    }
+  }
+
+  // 2. Horas Extras
+  const sheetOt = ss.getSheetByName("HorasExtras_HACCP");
+  const records = [];
+  if (sheetOt && sheetOt.getLastRow() > 1) {
+    const vals = sheetOt.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      const r = vals[i];
+      if (r[0] || r[1]) {
+        records.push({
+          id: String(r[0] || ""),
+          date: formatDateString(r[1]),
+          employeeName: String(r[2] || ""),
+          employeeCode: String(r[3] || ""),
+          area: String(r[4] || ""),
+          processType: String(r[5] || "General"),
+          processExitTime: String(r[6] || "-"),
+          hoursText: String(r[7] || ""),
+          decimalHours: parseFloat(r[8]) || 0,
+          justification: String(r[9] || ""),
+          hadVacation: String(r[10]).toUpperCase() === "SÍ" || String(r[10]).toUpperCase() === "SI",
+          vacationFrom: formatDateString(r[11]),
+          vacationTo: formatDateString(r[12]),
+          vacationDays: parseInt(r[13], 10) || 0,
+          signature: (String(r[14]).toUpperCase() === "SÍ" || String(r[14]).toUpperCase() === "SI") ? "HAS_SIGNATURE" : null,
+          createdAt: String(r[15] || ""),
+          employeeId: String(r[16] || "")
+        });
+      }
+    }
+  }
+
+  // 3. Salida de Procesos
+  const sheetProc = ss.getSheetByName("SalidaProcesos");
+  const periodsMap = {};
+  if (sheetProc && sheetProc.getLastRow() > 1) {
+    const vals = sheetProc.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      const r = vals[i];
+      const pId = String(r[0] || "general").trim();
+      const pTitle = String(r[1] || r[0] || "General").trim();
+
+      if (!periodsMap[pId]) {
+        periodsMap[pId] = {
+          periodId: pId,
+          periodTitle: pTitle,
+          rows: []
+        };
+      }
+
+      periodsMap[pId].rows.push({
+        date: formatDateString(r[2]),
+        day: String(r[3] || ""),
+        horaMatanza: String(r[4] || ""),
+        horaViscera: String(r[5] || ""),
+        horaDeshuese: String(r[6] || ""),
+        horaDescargaCarton: String(r[7] || ""),
+        observaciones: String(r[8] || "")
+      });
+    }
+  }
+  const processControls = Object.values(periodsMap);
+
+  // 4. Usuarios del Panel
+  const sheetUsr = ss.getSheetByName("Usuarios_Panel");
+  const adminUsers = [];
+  if (sheetUsr && sheetUsr.getLastRow() > 1) {
+    const vals = sheetUsr.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      const r = vals[i];
+      if (r[0] || r[1]) {
+        adminUsers.push({
+          id: String(r[0] || ""),
+          username: String(r[1] || "").toLowerCase(),
+          password: String(r[2] || ""),
+          name: String(r[3] || ""),
+          role: String(r[4] || "visor").toLowerCase(),
+          createdAt: String(r[5] || "")
+        });
+      }
+    }
+  }
+
+  return {
+    employees,
+    records,
+    processControls,
+    adminUsers
+  };
+}
+
+function formatDateString(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const d = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return String(val).trim();
+}
+
+function createJsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
 }

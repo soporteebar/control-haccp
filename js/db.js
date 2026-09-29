@@ -436,6 +436,10 @@ const DB = {
       }
     }
     this.save(data);
+
+    // Sincronizar automáticamente con Google Sheets
+    this.syncAdminUserToGoogleSheets(user);
+
     return user;
   },
 
@@ -451,6 +455,10 @@ const DB = {
     }
     data.adminUsers = data.adminUsers.filter(u => u.id !== id);
     this.save(data);
+
+    // Notificar eliminación a Google Sheets
+    this.syncAdminUserDeleteToGoogleSheets(id);
+
     return true;
   },
 
@@ -599,6 +607,10 @@ const DB = {
     const data = this.load();
     data.records = data.records.filter(r => r.id !== id);
     this.save(data);
+
+    // Sincronizar eliminación en Google Sheets
+    this.syncRecordDeleteToGoogleSheets(id);
+
     return true;
   },
 
@@ -659,6 +671,10 @@ const DB = {
     if (!data.processControls) return false;
     data.processControls = data.processControls.filter(p => p.periodId !== periodId);
     this.save(data);
+
+    // Sincronizar eliminación en Google Sheets
+    this.syncProcessDeleteToGoogleSheets(periodId);
+
     return true;
   },
 
@@ -887,6 +903,27 @@ const DB = {
     }
   },
 
+  // Eliminar registro de horas extras en Google Sheets
+  async syncRecordDeleteToGoogleSheets(recordId) {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) return;
+
+    try {
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'delete_record',
+          id: recordId,
+          timestamp: new Date().toISOString()
+        })
+      });
+      console.log('🗑️ Registro de horas eliminado de Google Sheets:', recordId);
+    } catch (err) {
+      console.warn('⚠️ Error al eliminar registro de Google Sheets:', err);
+    }
+  },
+
   // Sincronizar control de procesos a la hoja "SalidaProcesos"
   async syncProcessesToGoogleSheets(periodData) {
     const config = this.getConfig();
@@ -912,7 +949,77 @@ const DB = {
     }
   },
 
-  // Sincronizar masivamente TODO el sistema a Google Sheets (Empleados, Procesos y Horas)
+  // Eliminar período de salida de procesos en Google Sheets
+  async syncProcessDeleteToGoogleSheets(periodId) {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) return;
+
+    try {
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'delete_process_period',
+          periodId: periodId,
+          timestamp: new Date().toISOString()
+        })
+      });
+      console.log('🗑️ Período de procesos eliminado de Google Sheets:', periodId);
+    } catch (err) {
+      console.warn('⚠️ Error al eliminar período de Google Sheets:', err);
+    }
+  },
+
+  // Sincronizar usuario del panel a la hoja "Usuarios_Panel"
+  async syncAdminUserToGoogleSheets(user) {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) return;
+
+    try {
+      const payload = {
+        action: 'save_admin_user',
+        id: user.id,
+        username: user.username,
+        password: user.password || '',
+        name: user.name || user.username,
+        role: user.role || 'visor',
+        createdAt: user.createdAt || new Date().toISOString().split('T')[0],
+        timestamp: new Date().toISOString()
+      };
+
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      console.log('✅ Usuario del panel sincronizado con Google Sheets:', user.username);
+    } catch (err) {
+      console.warn('⚠️ Error al sincronizar usuario con Google Sheets:', err);
+    }
+  },
+
+  // Eliminar usuario del panel en Google Sheets
+  async syncAdminUserDeleteToGoogleSheets(userId) {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) return;
+
+    try {
+      await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'delete_admin_user',
+          id: userId,
+          timestamp: new Date().toISOString()
+        })
+      });
+      console.log('🗑️ Usuario del panel eliminado de Google Sheets:', userId);
+    } catch (err) {
+      console.warn('⚠️ Error al eliminar usuario de Google Sheets:', err);
+    }
+  },
+
+  // Sincronizar masivamente TODO el sistema a Google Sheets (Empleados, Procesos, Horas y Usuarios)
   async syncAllDataToGoogleSheets() {
     const config = this.getConfig();
     if (!config.googleSheetsUrl) {
@@ -938,6 +1045,7 @@ const DB = {
         const exitInfo = this.getProcessExitInfo(r.date, r.processType, r.justification);
         return {
           id: r.id,
+          employeeId: r.employeeId,
           date: r.date,
           employeeName: emp ? emp.name : 'Desconocido',
           employeeCode: emp ? emp.code : '',
@@ -956,6 +1064,8 @@ const DB = {
         };
       });
 
+      const adminUsers = this.getAdminUsers();
+
       await fetch(config.googleSheetsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -964,6 +1074,7 @@ const DB = {
           employees,
           processControls,
           records,
+          adminUsers,
           timestamp: new Date().toISOString()
         })
       });
@@ -972,10 +1083,154 @@ const DB = {
         success: true,
         empCount: employees.length,
         procCount: processControls.length,
-        recCount: records.length
+        recCount: records.length,
+        usrCount: adminUsers.length
       };
     } catch (err) {
       console.error('Error en sincronización masiva a Google Sheets:', err);
+      return { success: false, error: err.toString() };
+    }
+  },
+
+  // LEER / OBTENER TODOS LOS DATOS DESDE GOOGLE SHEETS (Read / Pull)
+  async loadAllFromGoogleSheets() {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) {
+      return { success: false, message: 'URL de Google Sheets no configurada. Ingrésala en la Pestaña de Configuración.' };
+    }
+
+    try {
+      let result = null;
+      // Intento 1: POST con action: 'get_all_data' (evita caching de navegadores)
+      try {
+        const res = await fetch(config.googleSheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'get_all_data', timestamp: new Date().toISOString() })
+        });
+        if (res.ok) {
+          result = await res.json();
+        }
+      } catch (postErr) {
+        console.warn('POST read falló, intentando vía GET con query parameter...', postErr);
+      }
+
+      // Intento 2: GET fallback
+      if (!result || !result.status) {
+        const getUrl = config.googleSheetsUrl + (config.googleSheetsUrl.includes('?') ? '&' : '?') + 'action=get_all_data&_t=' + Date.now();
+        const resGet = await fetch(getUrl);
+        result = await resGet.json();
+      }
+
+      if (!result || result.status !== 'success') {
+        return { success: false, message: result && result.error ? result.error : 'No se pudo obtener respuesta válida de Google Sheets' };
+      }
+
+      const localData = this.load();
+
+      // 1. Empleados
+      let empCount = 0;
+      if (Array.isArray(result.employees) && result.employees.length > 0) {
+        const sheetEmployees = result.employees;
+        const currentEmployees = localData.employees || [];
+
+        // Combinar manteniendo consistencia
+        sheetEmployees.forEach(sheetEmp => {
+          const idx = currentEmployees.findIndex(e => e.id === sheetEmp.id || (sheetEmp.code && e.code === sheetEmp.code));
+          if (idx >= 0) {
+            currentEmployees[idx] = { ...currentEmployees[idx], ...sheetEmp };
+          } else {
+            currentEmployees.push(sheetEmp);
+          }
+        });
+        localData.employees = currentEmployees;
+        empCount = sheetEmployees.length;
+      }
+
+      // 2. Horas Extras
+      let recCount = 0;
+      if (Array.isArray(result.records) && result.records.length > 0) {
+        const sheetRecords = result.records;
+        const currentRecords = localData.records || [];
+
+        sheetRecords.forEach(sheetRec => {
+          // Asignar employeeId si viene vacío buscando por código o nombre
+          if (!sheetRec.employeeId && sheetRec.employeeCode) {
+            const foundEmp = (localData.employees || []).find(e => e.code === sheetRec.employeeCode || e.name === sheetRec.employeeName);
+            if (foundEmp) sheetRec.employeeId = foundEmp.id;
+          }
+
+          const idx = currentRecords.findIndex(r => r.id === sheetRec.id || (r.date === sheetRec.date && r.employeeId === sheetRec.employeeId));
+          if (idx >= 0) {
+            // Preservar firma en imagen si la hoja solo reporta estado booleano
+            const existingSig = currentRecords[idx].signature;
+            currentRecords[idx] = {
+              ...currentRecords[idx],
+              ...sheetRec,
+              signature: existingSig || (sheetRec.signature === 'HAS_SIGNATURE' ? null : sheetRec.signature)
+            };
+          } else {
+            currentRecords.push(sheetRec);
+          }
+        });
+
+        // Ordenar por fecha
+        currentRecords.sort((a, b) => (a.date > b.date ? 1 : -1));
+        localData.records = currentRecords;
+        recCount = sheetRecords.length;
+      }
+
+      // 3. Salida de Procesos
+      let procCount = 0;
+      if (Array.isArray(result.processControls) && result.processControls.length > 0) {
+        const sheetProcesses = result.processControls;
+        const currentProcesses = localData.processControls || [];
+
+        sheetProcesses.forEach(sheetProc => {
+          const idx = currentProcesses.findIndex(p => p.periodId === sheetProc.periodId || p.periodTitle === sheetProc.periodTitle);
+          if (idx >= 0) {
+            currentProcesses[idx] = sheetProc;
+          } else {
+            currentProcesses.push(sheetProc);
+          }
+        });
+        localData.processControls = currentProcesses;
+        procCount = sheetProcesses.length;
+      }
+
+      // 4. Usuarios del Panel
+      let usrCount = 0;
+      if (Array.isArray(result.adminUsers) && result.adminUsers.length > 0) {
+        const sheetUsers = result.adminUsers;
+        const currentUsers = localData.adminUsers || [];
+
+        sheetUsers.forEach(sheetUsr => {
+          const idx = currentUsers.findIndex(u => u.id === sheetUsr.id || u.username.toLowerCase() === sheetUsr.username.toLowerCase());
+          if (idx >= 0) {
+            currentUsers[idx] = { ...currentUsers[idx], ...sheetUsr };
+          } else {
+            currentUsers.push(sheetUsr);
+          }
+        });
+        localData.adminUsers = currentUsers;
+        usrCount = sheetUsers.length;
+      }
+
+      // Guardar base de datos actualizada en LocalStorage
+      this.save(localData);
+
+      return {
+        success: true,
+        counts: {
+          employees: empCount,
+          records: recCount,
+          processControls: procCount,
+          adminUsers: usrCount
+        }
+      };
+
+    } catch (err) {
+      console.error('Error al cargar datos desde Google Sheets:', err);
       return { success: false, error: err.toString() };
     }
   },

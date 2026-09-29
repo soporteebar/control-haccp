@@ -27,6 +27,7 @@ const AdminApp = {
     this.loadGoogleSheetsConfig();
     this.renderAdminUsers();
     this.bindAdminUserModals();
+    this.bindRecordModals();
     this.bindModals();
     ProcesosModule.init();
   },
@@ -333,12 +334,15 @@ const AdminApp = {
             ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Vacaciones: Sí</span>' 
             : '<span class="text-xs text-slate-400">No</span>'}
         </td>
-        <td class="py-3 px-4 text-center">
-          <button class="btn-action-view text-xs font-semibold text-blue-600 hover:text-blue-800 mr-1" onclick="AdminApp.viewRecordDetail('${r.id}')" title="Ver detalle completo">
+        <td class="py-3 px-4 text-center whitespace-nowrap">
+          <button class="btn-action-view text-xs font-semibold text-blue-600 hover:text-blue-800 mr-1.5" onclick="AdminApp.viewRecordDetail('${r.id}')" title="Ver detalle completo">
             Ver
           </button>
           ${!isVisor ? `
-            <button class="btn-action-delete text-xs font-semibold text-red-600 hover:text-red-800" onclick="AdminApp.deleteRecord('${r.id}')" title="Eliminar">
+            <button class="btn-action-edit text-xs font-semibold text-emerald-600 hover:text-emerald-800 mr-1.5" onclick="AdminApp.editRecord('${r.id}')" title="Editar este registro">
+              Editar
+            </button>
+            <button class="btn-action-delete text-xs font-semibold text-red-600 hover:text-red-800" onclick="AdminApp.deleteRecord('${r.id}')" title="Eliminar registro">
               ✕
             </button>
           ` : ''}
@@ -495,9 +499,14 @@ const AdminApp = {
           <button class="btn-sm-excel flex items-center gap-1.5" onclick="AdminApp.exportSingleEmployeeExcel('${emp.id}')">
             Excel
           </button>
-          <button class="btn-sm-danger ml-auto" onclick="AdminApp.deleteEmployee('${emp.id}')" title="Eliminar Empleado">
-            Eliminar
-          </button>
+          ${!this.currentUser || this.currentUser.role !== 'visor' ? `
+            <button class="btn-sm-secondary flex items-center gap-1" onclick="AdminApp.editEmployee('${emp.id}')" title="Editar empleado">
+              Editar
+            </button>
+            <button class="btn-sm-danger ml-auto" onclick="AdminApp.deleteEmployee('${emp.id}')" title="Eliminar Empleado">
+              Eliminar
+            </button>
+          ` : ''}
         </div>
       `;
       listContainer.appendChild(card);
@@ -722,7 +731,7 @@ const AdminApp = {
         try {
           const res = await DB.syncAllDataToGoogleSheets();
           if (res.success) {
-            alert(`✅ Sincronización completa con Google Sheets exitosa:\n• ${res.empCount} Colaboradores y enlaces en "Empleados_Enlaces"\n• ${res.recCount} Boletas y justificaciones en "HorasExtras_HACCP"\n• ${res.procCount} Períodos de planilla en "SalidaProcesos"`);
+            alert(`✅ Sincronización completa con Google Sheets exitosa:\n• ${res.empCount} Colaboradores y enlaces en "Empleados_Enlaces"\n• ${res.recCount} Boletas y justificaciones en "HorasExtras_HACCP"\n• ${res.procCount} Períodos de planilla en "SalidaProcesos"\n• ${res.usrCount || 0} Usuarios del Panel en "Usuarios_Panel"`);
           } else {
             alert(`⚠️ Error: ${res.message || res.error}`);
           }
@@ -734,6 +743,13 @@ const AdminApp = {
         }
       });
     }
+
+    // Botones para Cargar / Leer datos desde Google Sheets (Pull / Read)
+    const handlePull = () => this.pullDataFromGoogleSheets();
+    const btnPullHeader = document.getElementById('btnPullSheetsHeader');
+    if (btnPullHeader) btnPullHeader.addEventListener('click', handlePull);
+    const btnPullTab = document.getElementById('btnPullFromSheets');
+    if (btnPullTab) btnPullTab.addEventListener('click', handlePull);
 
     const btnBackup = document.getElementById('btnExportBackup');
     if (btnBackup) {
@@ -768,6 +784,57 @@ const AdminApp = {
       });
     }
 
+  },
+
+  // Realiza la lectura completa (Read) de las 4 hojas de Google Sheets
+  async pullDataFromGoogleSheets() {
+    const conf = DB.getConfig();
+    if (!conf.googleSheetsUrl) {
+      alert('Por favor ingresa primero la URL de tu Google Apps Script en la Pestaña 4 (Configuración).');
+      return;
+    }
+
+    const btnPullHeader = document.getElementById('btnPullSheetsHeader');
+    const btnPullTab = document.getElementById('btnPullFromSheets');
+
+    if (btnPullHeader) {
+      btnPullHeader.disabled = true;
+      btnPullHeader.innerHTML = '<span>⏳ Cargando...</span>';
+    }
+    if (btnPullTab) {
+      btnPullTab.disabled = true;
+      btnPullTab.textContent = '⏳ Cargando desde Google Sheets...';
+    }
+
+    try {
+      const res = await DB.loadAllFromGoogleSheets();
+      if (res.success) {
+        this.populateEmployeeFilters();
+        this.renderDashboard();
+        this.renderEmployees();
+        this.renderAdminUsers();
+        if (window.ProcesosModule) ProcesosModule.loadPeriods();
+
+        alert(`✅ Datos cargados y sincronizados desde Google Sheets:\n• ${res.counts.employees} Empleados (Empleados_Enlaces)\n• ${res.counts.records} Registros de Horas Extras (HorasExtras_HACCP)\n• ${res.counts.processControls} Períodos de Planilla (SalidaProcesos)\n• ${res.counts.adminUsers} Usuarios del Panel (Usuarios_Panel)`);
+      } else {
+        alert(`⚠️ No se pudieron cargar los datos: ${res.message || res.error}`);
+      }
+    } catch (err) {
+      alert(`⚠️ Error consultando Google Sheets: ${err.message || err}`);
+    } finally {
+      if (btnPullHeader) {
+        btnPullHeader.disabled = false;
+        btnPullHeader.innerHTML = `
+          <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span class="hidden sm:inline">📥 Cargar de Google Sheets</span>
+          <span class="sm:hidden">📥 Nube</span>
+        `;
+      }
+      if (btnPullTab) {
+        btnPullTab.disabled = false;
+        btnPullTab.textContent = '📥 Cargar / Refrescar desde Google Sheets';
+      }
+    }
   },
 
   // --- GESTIÓN DE USUARIOS DEL PANEL (ADMIN Y VISOR) ---
@@ -916,15 +983,202 @@ const AdminApp = {
     }
   },
 
+  editEmployee(id) {
+    const emp = DB.getEmployeeById(id);
+    if (!emp) return;
+
+    const modal = document.getElementById('createEmployeeModal');
+    if (!modal) return;
+
+    const editIdEl = document.getElementById('empEditId');
+    if (editIdEl) editIdEl.value = emp.id;
+
+    const titleEl = document.getElementById('titleEmployeeModal');
+    if (titleEl) titleEl.textContent = 'Editar Empleado';
+
+    document.getElementById('empNewName').value = emp.name || '';
+    document.getElementById('empNewCode').value = emp.code || '';
+    document.getElementById('empNewPhone').value = emp.phone || '';
+    document.getElementById('empNewArea').value = emp.area || 'Equipo HACCP';
+    document.getElementById('empNewRole').value = emp.role || 'Inspector de Calidad';
+    
+    const activeEl = document.getElementById('empNewActive');
+    if (activeEl) activeEl.value = emp.active !== false ? 'true' : 'false';
+
+    modal.classList.remove('hidden');
+  },
+
+  openCreateRecordModal() {
+    const modal = document.getElementById('recordModal');
+    const form = document.getElementById('recordForm');
+    if (!modal || !form) return;
+
+    form.reset();
+    document.getElementById('recordEditId').value = '';
+    document.getElementById('titleRecordModal').textContent = 'Registrar Horas Extras';
+    document.getElementById('recordEditDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('recordEditHours').value = '1';
+    document.getElementById('recordEditMinutes').value = '0';
+
+    this.populateRecordEmployeeSelect();
+
+    const vacFields = document.getElementById('recordVacationFields');
+    if (vacFields) vacFields.classList.add('hidden');
+
+    modal.classList.remove('hidden');
+  },
+
+  editRecord(id) {
+    const records = DB.getRecords();
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+
+    const modal = document.getElementById('recordModal');
+    const form = document.getElementById('recordForm');
+    if (!modal || !form) return;
+
+    document.getElementById('recordEditId').value = record.id;
+    document.getElementById('titleRecordModal').textContent = 'Editar Registro de Horas Extras';
+    this.populateRecordEmployeeSelect(record.employeeId);
+    document.getElementById('recordEditDate').value = record.date || '';
+
+    const dec = parseFloat(record.decimalHours) || 0;
+    const totalMinutes = Math.round(dec * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    document.getElementById('recordEditHours').value = h;
+    document.getElementById('recordEditMinutes').value = m;
+
+    document.getElementById('recordEditProcess').value = record.processType || 'General';
+    document.getElementById('recordEditJustification').value = record.justification || '';
+
+    const chkVac = document.getElementById('recordEditHadVacation');
+    const vacFields = document.getElementById('recordVacationFields');
+    if (chkVac) chkVac.checked = !!record.hadVacation;
+    if (vacFields) {
+      if (record.hadVacation) {
+        vacFields.classList.remove('hidden');
+        document.getElementById('recordEditVacFrom').value = record.vacationFrom || '';
+        document.getElementById('recordEditVacTo').value = record.vacationTo || '';
+        document.getElementById('recordEditVacDays').value = record.vacationDays || 0;
+      } else {
+        vacFields.classList.add('hidden');
+      }
+    }
+
+    modal.classList.remove('hidden');
+  },
+
+  populateRecordEmployeeSelect(selectedId = '') {
+    const select = document.getElementById('recordEditEmployee');
+    if (!select) return;
+    const emps = DB.getEmployees();
+    select.innerHTML = '';
+    emps.forEach(emp => {
+      const opt = document.createElement('option');
+      opt.value = emp.id;
+      opt.textContent = `${emp.name} (${emp.code || emp.area})`;
+      if (emp.id === selectedId) opt.selected = true;
+      select.appendChild(opt);
+    });
+  },
+
+  bindRecordModals() {
+    const btnOpen = document.getElementById('btnOpenCreateRecord');
+    const modal = document.getElementById('recordModal');
+    const btnClose = document.getElementById('btnCloseRecordModal');
+    const form = document.getElementById('recordForm');
+    const chkVac = document.getElementById('recordEditHadVacation');
+    const vacFields = document.getElementById('recordVacationFields');
+
+    if (btnOpen) {
+      btnOpen.addEventListener('click', () => this.openCreateRecordModal());
+    }
+
+    if (btnClose && modal) {
+      btnClose.addEventListener('click', () => modal.classList.add('hidden'));
+    }
+
+    if (chkVac && vacFields) {
+      chkVac.addEventListener('change', () => {
+        if (chkVac.checked) vacFields.classList.remove('hidden');
+        else vacFields.classList.add('hidden');
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('recordEditId')?.value?.trim();
+        const employeeId = document.getElementById('recordEditEmployee')?.value;
+        const date = document.getElementById('recordEditDate')?.value;
+        const hours = parseInt(document.getElementById('recordEditHours')?.value || '0', 10);
+        const minutes = parseInt(document.getElementById('recordEditMinutes')?.value || '0', 10);
+        const processType = document.getElementById('recordEditProcess')?.value;
+        const justification = document.getElementById('recordEditJustification')?.value?.trim();
+        const hadVacation = document.getElementById('recordEditHadVacation')?.checked || false;
+        const vacFrom = document.getElementById('recordEditVacFrom')?.value || '';
+        const vacTo = document.getElementById('recordEditVacTo')?.value || '';
+        const vacDays = parseInt(document.getElementById('recordEditVacDays')?.value || '0', 10);
+
+        if (!employeeId || !date) {
+          alert('Por favor selecciona empleado y fecha del turno.');
+          return;
+        }
+
+        const decimal = TimeUtils.toDecimal(hours, minutes);
+        const human = TimeUtils.toHuman(decimal);
+
+        const recordData = {
+          employeeId,
+          date,
+          hours,
+          minutes,
+          decimalHours: decimal,
+          hoursText: human,
+          processType,
+          justification,
+          hadVacation,
+          vacationFrom: vacFrom,
+          vacationTo: vacTo,
+          vacationDays: vacDays
+        };
+
+        if (id) {
+          recordData.id = id;
+          const existing = (DB.getRecords() || []).find(r => r.id === id);
+          if (existing && existing.signature) {
+            recordData.signature = existing.signature;
+          }
+        }
+
+        DB.saveRecord(recordData);
+
+        if (modal) modal.classList.add('hidden');
+        this.renderDashboard();
+        alert(id ? '✅ Registro de horas actualizado y sincronizado.' : '✅ Registro de horas creado y sincronizado.');
+      });
+    }
+  },
+
   bindModals() {
-    // Modal Crear Empleado
+    // Modal Crear / Editar Empleado
     const btnOpenCreate = document.getElementById('btnOpenCreateEmployee');
     const modalCreate = document.getElementById('createEmployeeModal');
     const btnCloseCreate = document.getElementById('btnCloseCreateEmployee');
     const formCreate = document.getElementById('createEmployeeForm');
 
     if (btnOpenCreate && modalCreate) {
-      btnOpenCreate.addEventListener('click', () => modalCreate.classList.remove('hidden'));
+      btnOpenCreate.addEventListener('click', () => {
+        formCreate.reset();
+        const editIdEl = document.getElementById('empEditId');
+        if (editIdEl) editIdEl.value = '';
+        const titleEl = document.getElementById('titleEmployeeModal');
+        if (titleEl) titleEl.textContent = 'Crear Nuevo Empleado';
+        const activeEl = document.getElementById('empNewActive');
+        if (activeEl) activeEl.value = 'true';
+        modalCreate.classList.remove('hidden');
+      });
     }
     if (btnCloseCreate && modalCreate) {
       btnCloseCreate.addEventListener('click', () => modalCreate.classList.add('hidden'));
@@ -933,32 +1187,46 @@ const AdminApp = {
     if (formCreate) {
       formCreate.addEventListener('submit', (e) => {
         e.preventDefault();
+        const editId = document.getElementById('empEditId')?.value?.trim();
         const name = document.getElementById('empNewName').value.trim();
         const code = document.getElementById('empNewCode').value.trim();
         const area = document.getElementById('empNewArea').value.trim();
         const role = document.getElementById('empNewRole').value.trim();
         const phone = document.getElementById('empNewPhone').value.trim();
+        const active = document.getElementById('empNewActive')?.value !== 'false';
 
         if (!name || !code) {
           alert('Nombre y Código son requeridos.');
           return;
         }
 
-        DB.saveEmployee({
+        const empData = {
           name,
           code,
           area: area || 'Equipo HACCP',
-          role: role || 'Inspector',
+          role: role || 'Inspector de Calidad',
           phone,
-          active: true
-        });
+          active
+        };
+
+        if (editId) {
+          empData.id = editId;
+          const existing = DB.getEmployeeById(editId);
+          if (existing && existing.createdAt) {
+            empData.createdAt = existing.createdAt;
+          }
+        }
+
+        DB.saveEmployee(empData);
 
         modalCreate.classList.add('hidden');
         formCreate.reset();
         this.populateEmployeeFilters();
         this.renderEmployees();
         this.renderDashboard();
-        alert(`✅ Empleado ${name} creado con éxito. Ahora puedes copiar su enlace personalizado.`);
+        alert(editId 
+          ? `✅ Empleado "${name}" actualizado y sincronizado en Google Sheets.` 
+          : `✅ Empleado "${name}" creado con éxito y sincronizado en Google Sheets.`);
       });
     }
 
