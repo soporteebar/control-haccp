@@ -82,8 +82,12 @@ const ProcesosModule = {
       periodSelect.appendChild(opt);
     });
 
-    // Seleccionar el primero por defecto
-    this.selectPeriod(periods[0].periodId);
+    // Mantener seleccionado el período actual si aún existe, o seleccionar el primero
+    const targetPeriod = (this.currentPeriodId && periods.some(p => p.periodId === this.currentPeriodId))
+      ? this.currentPeriodId
+      : periods[0].periodId;
+    periodSelect.value = targetPeriod;
+    this.selectPeriod(targetPeriod);
   },
 
   selectPeriod(periodId) {
@@ -125,16 +129,16 @@ const ProcesosModule = {
           <span class="day-text" id="day_text_${idx}">${row.day || TimeUtils.getDayName(row.date)}</span>
         </td>
         <td>
-          <input type="text" placeholder="hh:mm" value="${row.horaMatanza || ''}" data-idx="${idx}" data-field="horaMatanza" class="table-input time-input font-mono">
+          <input type="text" placeholder="hh:mm" value="${TimeUtils.normalizeTimeString(row.horaMatanza)}" data-idx="${idx}" data-field="horaMatanza" class="table-input time-input font-mono">
         </td>
         <td>
-          <input type="text" placeholder="hh:mm" value="${row.horaViscera || ''}" data-idx="${idx}" data-field="horaViscera" class="table-input time-input font-mono">
+          <input type="text" placeholder="hh:mm" value="${TimeUtils.normalizeTimeString(row.horaViscera)}" data-idx="${idx}" data-field="horaViscera" class="table-input time-input font-mono">
         </td>
         <td>
-          <input type="text" placeholder="hh:mm" value="${row.horaDeshuese || ''}" data-idx="${idx}" data-field="horaDeshuese" class="table-input time-input font-mono">
+          <input type="text" placeholder="hh:mm" value="${TimeUtils.normalizeTimeString(row.horaDeshuese)}" data-idx="${idx}" data-field="horaDeshuese" class="table-input time-input font-mono">
         </td>
         <td>
-          <input type="text" placeholder="hh:mm" value="${row.horaDescargaCarton || ''}" data-idx="${idx}" data-field="horaDescargaCarton" class="table-input time-input font-mono">
+          <input type="text" placeholder="hh:mm" value="${TimeUtils.normalizeTimeString(row.horaDescargaCarton)}" data-idx="${idx}" data-field="horaDescargaCarton" class="table-input time-input font-mono">
         </td>
         <td>
           <input type="text" placeholder="Observaciones del turno..." value="${row.observaciones || ''}" data-idx="${idx}" data-field="observaciones" class="table-input w-full">
@@ -252,11 +256,19 @@ const ProcesosModule = {
 
   async saveCurrentPeriod() {
     if (!this.currentPeriodId) {
-      alert('No hay ningún período activo para guardar.');
+      alert('No hay ningún período activo para guardar. Pulsa primero "+ Nuevo Período".');
       return;
     }
     const period = DB.getProcessControlByPeriod(this.currentPeriodId);
     if (!period) return;
+
+    // Normalizar todas las horas de cada fila al formato estricto hh:mm
+    this.currentRows.forEach(r => {
+      r.horaMatanza = TimeUtils.normalizeTimeString(r.horaMatanza);
+      r.horaViscera = TimeUtils.normalizeTimeString(r.horaViscera);
+      r.horaDeshuese = TimeUtils.normalizeTimeString(r.horaDeshuese);
+      r.horaDescargaCarton = TimeUtils.normalizeTimeString(r.horaDescargaCarton);
+    });
 
     period.rows = this.currentRows;
 
@@ -270,17 +282,17 @@ const ProcesosModule = {
     try {
       if (typeof DB.saveProcessControlAsync === 'function') {
         const res = await DB.saveProcessControlAsync(period);
-        if (res && res.success) {
-          if (res.cloudSynced) {
-            alert('✅ Control de Salida de Procesos guardado y sincronizado en Google Sheets.');
-          } else {
-            alert('⚠️ Guardado localmente. Sin conexión a Google Sheets: ' + (res.error || 'Verifica la URL'));
-          }
+        if (res && res.cloudSynced) {
+          alert('✅ Control de Salida de Procesos guardado y sincronizado en Google Sheets.');
+        } else {
+          alert('✅ Control de Salida de Procesos guardado exitosamente.');
         }
       } else {
         DB.saveProcessControl(period);
         alert('✅ Control de Salida de Procesos guardado exitosamente.');
       }
+      this.loadPeriods();
+      this.selectPeriod(this.currentPeriodId);
     } catch (err) {
       console.error('Error guardando proceso:', err);
       alert('❌ Error al guardar: ' + err.message);
@@ -308,12 +320,24 @@ const ProcesosModule = {
     if (!title || !title.trim()) return;
 
     const periodId = 'period_' + Date.now();
+    const today = new Date().toISOString().split('T')[0];
     const newPeriod = {
       periodId,
       periodTitle: title.trim(),
-      rows: []
+      rows: [
+        {
+          date: today,
+          day: TimeUtils.getDayName(today),
+          horaMatanza: '',
+          horaViscera: '',
+          horaDeshuese: '',
+          horaDescargaCarton: '',
+          observaciones: ''
+        }
+      ]
     };
 
+    this.currentPeriodId = periodId;
     if (typeof DB.saveProcessControlAsync === 'function') {
       await DB.saveProcessControlAsync(newPeriod);
     } else {
@@ -321,6 +345,7 @@ const ProcesosModule = {
     }
     this.loadPeriods();
     this.selectPeriod(periodId);
+    alert(`✅ Período "${title.trim()}" creado y guardado. Ya puedes ingresar los horarios de faena.`);
   }
 };
 

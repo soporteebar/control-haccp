@@ -106,43 +106,39 @@ const EmpleadoApp = {
     }
   },
 
-  checkEmployeeAuth() {
+  async checkEmployeeAuth() {
     const urlParams = new URLSearchParams(window.location.search);
     const phoneParam = urlParams.get('phone');
     const empParam = urlParams.get('emp') || urlParams.get('id');
+    const codeParam = urlParams.get('code');
+    const lookupParam = phoneParam || empParam || codeParam;
 
-    // 1. Si el teléfono viene directo en el link (WhatsApp), intentar login automático
-    if (phoneParam) {
-      const emp = DB.getEmployeeByPhone(phoneParam);
-      if (emp) {
-        this.loginSuccess(emp);
-        return;
-      }
-    }
-
-    // 2. Verificar si ya hay una sesión activa en este navegador
+    // 1. Si ya hay una sesión activa en este navegador
     const sessionEmpId = sessionStorage.getItem('HACCP_CURRENT_EMP_ID');
     if (sessionEmpId) {
-      const emp = DB.getEmployeeById(sessionEmpId);
+      let emp = DB.findEmployee ? DB.findEmployee(sessionEmpId) : DB.getEmployeeById(sessionEmpId);
+      if (!emp && typeof DB.findEmployeeAsync === 'function') {
+        emp = await DB.findEmployeeAsync(sessionEmpId);
+      }
       if (emp) {
         this.loginSuccess(emp);
         return;
       }
     }
 
-    // 3. Si viene con parámetro de empleado en URL, podemos sugerir o solicitar confirmación
-    if (empParam) {
-      const expectedEmp = DB.getEmployeeById(empParam);
-      if (expectedEmp) {
-        const phoneInput = document.getElementById('inputEmployeePhone');
-        if (phoneInput && expectedEmp.phone) {
-          // Guardar referencia esperada
-          this.expectedEmpId = expectedEmp.id;
-        }
+    // 2. Si viene con parámetro en el link (?emp=..., ?phone=..., ?code=...)
+    if (lookupParam) {
+      let emp = DB.findEmployee ? DB.findEmployee(lookupParam) : DB.getEmployeeByPhone(lookupParam);
+      if (!emp && typeof DB.findEmployeeAsync === 'function') {
+        emp = await DB.findEmployeeAsync(lookupParam);
+      }
+      if (emp) {
+        this.loginSuccess(emp);
+        return;
       }
     }
 
-    // Mostrar compuerta de validación telefónica
+    // 3. Mostrar compuerta de validación
     this.showPhoneGate();
   },
 
@@ -189,21 +185,87 @@ const EmpleadoApp = {
   },
 
   bindEvents() {
-    // Formulario de Validación de Teléfono
+    // Formulario de Validación de Colaborador (Teléfono, Código o Nombre)
     const phoneForm = document.getElementById('phoneGateForm');
     if (phoneForm) {
-      phoneForm.addEventListener('submit', (e) => {
+      phoneForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('inputEmployeePhone');
         const err = document.getElementById('phoneGateError');
-        const phoneVal = input ? input.value.trim() : '';
+        const submitBtn = phoneForm.querySelector('button[type="submit"]');
+        const origText = submitBtn ? submitBtn.innerHTML : '';
+        const queryVal = input ? input.value.trim() : '';
 
-        const emp = DB.getEmployeeByPhone(phoneVal);
-        if (emp) {
-          if (err) err.classList.add('hidden');
-          this.loginSuccess(emp);
-        } else {
-          if (err) err.classList.remove('hidden');
+        if (!queryVal) return;
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '⏳ Validando colaborador...';
+        }
+        if (err) err.classList.add('hidden');
+
+        try {
+          // 1. Buscar primero en datos locales
+          let emp = DB.findEmployee ? DB.findEmployee(queryVal) : DB.getEmployeeByPhone(queryVal);
+
+          // 2. Si no se encuentra, consultar Google Sheets
+          if (!emp && typeof DB.findEmployeeAsync === 'function') {
+            if (submitBtn) submitBtn.innerHTML = '☁️ Consultando Google Sheets...';
+            emp = await DB.findEmployeeAsync(queryVal);
+          }
+
+          if (emp) {
+            this.loginSuccess(emp);
+          } else {
+            if (err) {
+              err.classList.remove('hidden');
+              err.innerHTML = `⚠️ No se encontró al colaborador con: <strong>"${queryVal}"</strong>.<br>` +
+                `Verifica que esté registrado en el sistema. Puedes ingresar tu <strong>Número de Teléfono</strong>, ` +
+                `tu <strong>Código (ej: EMP-01)</strong> o tu <strong>Nombre</strong>.`;
+            }
+          }
+        } catch (errEx) {
+          console.error('Error al validar colaborador:', errEx);
+          if (err) {
+            err.classList.remove('hidden');
+            err.textContent = 'Error al validar: ' + errEx.message;
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origText;
+          }
+        }
+      });
+    }
+
+    // Botón de Configuración Rápida de URL de Google Sheets
+    const btnConfigSheetsUrl = document.getElementById('btnConfigSheetsUrl');
+    if (btnConfigSheetsUrl) {
+      btnConfigSheetsUrl.addEventListener('click', async () => {
+        const conf = DB.getConfig();
+        const currentUrl = conf.googleSheetsUrl || '';
+        const newUrl = prompt(
+          'Configura la URL de tu Web App de Google Apps Script para conectar este dispositivo a la nube:\n\n' +
+          '(Debe terminar en /exec)',
+          currentUrl
+        );
+
+        if (newUrl !== null) {
+          const trimmed = newUrl.trim();
+          DB.saveConfig({ ...conf, googleSheetsUrl: trimmed });
+          if (trimmed) {
+            alert('⏳ Conectando con Google Sheets...');
+            const res = await DB.loadAllFromGoogleSheets();
+            if (res.success) {
+              alert('✅ Conexión exitosa. Se descargaron los colaboradores y períodos desde Google Sheets.');
+              this.checkEmployeeAuth();
+            } else {
+              alert('⚠️ Se guardó la URL, pero no se pudo conectar: ' + (res.message || res.error || 'Verifica la URL'));
+            }
+          } else {
+            alert('ℹ️ Modo local activo.');
+          }
         }
       });
     }

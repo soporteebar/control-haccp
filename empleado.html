@@ -46,26 +46,31 @@
       </div>
       <h2 class="text-xl font-black text-slate-800">Validación de Colaborador</h2>
       <p class="text-xs text-slate-500 mt-1 mb-6">
-        Por seguridad y confidencialidad, ingresa tu <strong>número de teléfono registrado</strong> para acceder a tu reporte diario de horas extras HACCP:
+        Ingresa tu <strong>número de teléfono</strong>, tu <strong>código (ej: EMP-01)</strong> o tu <strong>nombre</strong> registrado para ingresar a tu formulario diario de horas extras:
       </p>
 
       <form id="phoneGateForm" class="max-w-sm mx-auto space-y-4">
         <div>
           <label for="inputEmployeePhone" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 text-left">
-            Número de Teléfono Celular *
+            Teléfono, Código de Empleado o Nombre *
           </label>
-          <input type="tel" id="inputEmployeePhone" required placeholder="Ej: 8888-0001 ó +505 88880001" 
-            class="form-control text-center text-lg font-bold tracking-widest text-slate-800">
-          <p class="text-xs text-slate-400 mt-1 text-left">Ingresa el teléfono registrado ante Recursos Humanos / Administración.</p>
+          <input type="text" id="inputEmployeePhone" required placeholder="Ej: 8888-0001, EMP-01 o tu nombre" 
+            class="form-control text-center text-base font-bold tracking-normal text-slate-800">
+          <p class="text-xs text-slate-400 mt-1 text-left">Ingresa el dato registrado en la lista de colaboradores HACCP.</p>
         </div>
 
         <div id="phoneGateError" class="hidden p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg font-medium text-left">
-          ⚠️ El número ingresado no coincide con ningún colaborador activo. Por favor comunícate con el Administrador HACCP.
+          ⚠️ El identificador ingresado no coincide con ningún colaborador activo. Por favor comunícate con el Administrador HACCP.
         </div>
 
         <button type="submit" class="btn btn-primary w-full py-3 font-bold text-sm shadow">
           Validar e Ingresar a mi Formulario &rarr;
         </button>
+
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+          <span>¿Problemas de conexión?</span>
+          <button type="button" id="btnConfigSheetsUrl" class="text-blue-600 hover:underline font-medium">⚙️ Conexión Google Sheets</button>
+        </div>
       </form>
     </div>
 

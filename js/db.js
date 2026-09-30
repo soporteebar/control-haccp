@@ -26,17 +26,26 @@ const TimeUtils = {
     return `${h}h y ${m} minutos`;
   },
 
-  // Normaliza cadenas de hora tipo "7:8" -> "07:08", "16:5" -> "16:05"
+  // Normaliza cadenas de hora a formato estricto hh:mm (ej: "7:8" -> "07:08", "16:25:00" -> "16:25", Date -> "16:25")
   normalizeTimeString(str) {
-    if (!str) return '';
-    const clean = str.trim();
-    const parts = clean.split(':');
-    if (parts.length === 2) {
-      const h = parts[0].padStart(2, '0');
-      const m = parts[1].padStart(2, '0');
+    if (!str && str !== 0) return '';
+    if (str instanceof Date) {
+      const h = String(str.getHours()).padStart(2, '0');
+      const m = String(str.getMinutes()).padStart(2, '0');
       return `${h}:${m}`;
     }
-    return str;
+    const clean = String(str).trim();
+    if (!clean || clean === '-' || clean.toLowerCase() === 'pendiente' || clean.toLowerCase() === 'sin registro') {
+      return clean === '-' ? '' : clean;
+    }
+    // Extraer hh:mm de formatos con segundos o fechas completas
+    const match = clean.match(/(\d{1,2}):(\d{1,2})/);
+    if (match) {
+      const h = match[1].padStart(2, '0');
+      const m = match[2].padStart(2, '0');
+      return `${h}:${m}`;
+    }
+    return clean;
   },
 
   // Obtiene nombre del día de una fecha YYYY-MM-DD
@@ -657,6 +666,61 @@ const DB = {
     }) || null;
   },
 
+  // Busca colaborador de forma flexible por Teléfono, Código (ej: EMP-01), ID o Nombre
+  findEmployee(query) {
+    if (!query) return null;
+    const q = String(query).trim();
+    if (!q) return null;
+
+    const employees = this.getEmployees();
+    const qLower = q.toLowerCase();
+    const qClean = qLower.replace(/[^a-z0-9]/g, '');
+
+    // 1. Por ID directo (emp_01, etc.)
+    let emp = employees.find(e => e.id && e.id.toLowerCase() === qLower);
+    if (emp) return emp;
+
+    // 2. Por Código (EMP-01, emp01, etc.)
+    emp = employees.find(e => {
+      if (!e.code) return false;
+      const cLower = e.code.toLowerCase();
+      const cClean = cLower.replace(/[^a-z0-9]/g, '');
+      return cLower === qLower || cClean === qClean;
+    });
+    if (emp) return emp;
+
+    // 3. Por Teléfono (completo o últimos 8 dígitos)
+    const digits = q.replace(/\D/g, '');
+    if (digits.length >= 4) {
+      emp = this.getEmployeeByPhone(q);
+      if (emp) return emp;
+    }
+
+    // 4. Por Nombre Completo o coincidencia parcial
+    emp = employees.find(e => e.name && e.name.toLowerCase() === qLower);
+    if (emp) return emp;
+
+    emp = employees.find(e => e.name && e.name.toLowerCase().includes(qLower));
+    if (emp) return emp;
+
+    return null;
+  },
+
+  // Busca colaborador consultando en memoria local y, si no se encuentra, en Google Sheets en vivo
+  async findEmployeeAsync(query) {
+    let emp = this.findEmployee(query);
+    if (emp) return emp;
+
+    // Si no está localmente, intentar refrescar desde Google Sheets
+    const conf = this.getConfig();
+    if (conf.googleSheetsUrl) {
+      console.log('🔍 Colaborador no encontrado localmente. Consultando directorio en Google Sheets...');
+      await this.loadAllFromGoogleSheets({ silent: true });
+      emp = this.findEmployee(query);
+    }
+    return emp;
+  },
+
   saveEmployee(employee) {
     const data = this.load();
     if (!employee.id) {
@@ -853,17 +917,17 @@ const DB = {
 
     let exitTime = '';
     if (displayName === 'Matanza') {
-      exitTime = foundRow.horaMatanza || 'Pendiente';
+      exitTime = foundRow.horaMatanza ? TimeUtils.normalizeTimeString(foundRow.horaMatanza) : 'Pendiente';
     } else if (displayName === 'Deshuese') {
-      exitTime = foundRow.horaDeshuese || 'Pendiente';
+      exitTime = foundRow.horaDeshuese ? TimeUtils.normalizeTimeString(foundRow.horaDeshuese) : 'Pendiente';
     } else if (displayName === 'Vísceras') {
-      exitTime = foundRow.horaViscera || 'Pendiente';
+      exitTime = foundRow.horaViscera ? TimeUtils.normalizeTimeString(foundRow.horaViscera) : 'Pendiente';
     } else if (displayName === 'Descarga Cartón' || displayName === 'Carga') {
-      exitTime = foundRow.horaDescargaCarton || 'Pendiente';
+      exitTime = foundRow.horaDescargaCarton ? TimeUtils.normalizeTimeString(foundRow.horaDescargaCarton) : 'Pendiente';
     } else {
       const parts = [];
-      if (foundRow.horaMatanza) parts.push(`Mat: ${foundRow.horaMatanza}`);
-      if (foundRow.horaDeshuese) parts.push(`Desh: ${foundRow.horaDeshuese}`);
+      if (foundRow.horaMatanza) parts.push(`Mat: ${TimeUtils.normalizeTimeString(foundRow.horaMatanza)}`);
+      if (foundRow.horaDeshuese) parts.push(`Desh: ${TimeUtils.normalizeTimeString(foundRow.horaDeshuese)}`);
       exitTime = parts.length > 0 ? parts.join(' | ') : 'Turno cerrado';
     }
 
@@ -871,10 +935,10 @@ const DB = {
       processName: displayName,
       exitTime: exitTime,
       allTimes: {
-        matanza: foundRow.horaMatanza || '-',
-        viscera: foundRow.horaViscera || '-',
-        deshuese: foundRow.horaDeshuese || '-',
-        carton: foundRow.horaDescargaCarton || '-'
+        matanza: TimeUtils.normalizeTimeString(foundRow.horaMatanza) || '-',
+        viscera: TimeUtils.normalizeTimeString(foundRow.horaViscera) || '-',
+        deshuese: TimeUtils.normalizeTimeString(foundRow.horaDeshuese) || '-',
+        carton: TimeUtils.normalizeTimeString(foundRow.horaDescargaCarton) || '-'
       },
       rowObservaciones: foundRow.observaciones || ''
     };
@@ -1421,8 +1485,17 @@ const DB = {
       // 3. Salida de Procesos: Reemplazo directo desde Google Sheets
       let procCount = 0;
       if (Array.isArray(result.processControls)) {
-        localData.processControls = result.processControls;
-        procCount = result.processControls.length;
+        localData.processControls = result.processControls.map(p => ({
+          ...p,
+          rows: (p.rows || []).map(r => ({
+            ...r,
+            horaMatanza: TimeUtils.normalizeTimeString(r.horaMatanza),
+            horaViscera: TimeUtils.normalizeTimeString(r.horaViscera),
+            horaDeshuese: TimeUtils.normalizeTimeString(r.horaDeshuese),
+            horaDescargaCarton: TimeUtils.normalizeTimeString(r.horaDescargaCarton)
+          }))
+        }));
+        procCount = localData.processControls.length;
       }
 
       // 4. Usuarios del Panel: Reemplazo directo desde Google Sheets

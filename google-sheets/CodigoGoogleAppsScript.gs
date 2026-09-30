@@ -17,6 +17,55 @@
  * escritura masiva con setValues() que se ejecuta en menos de 1 segundo.
  */
 
+// ==============================================================================
+// CONFIGURACIÓN (OPCIONAL):
+// Si abriste Apps Script desde tu Google Sheet en "Extensiones" > "Apps Script",
+// esta variable DEBE quedar vacía (""). Apps Script se vinculará automáticamente.
+//
+// Si creaste un script independiente en script.google.com, pega aquí el ID de tu
+// hoja (los caracteres entre /d/ y /edit de la URL de tu Google Sheet):
+// ==============================================================================
+const SPREADSHEET_ID = "";
+
+/**
+ * ==============================================================================
+ * 🌟 FUNCIÓN PRINCIPAL PARA PROBAR EN EL EDITOR DE GOOGLE APPS SCRIPT:
+ * Selecciona 'INICIALIZAR_SISTEMA_MACESA' en el menú de funciones arriba y pulsa 'Ejecutar'.
+ * ==============================================================================
+ */
+function INICIALIZAR_SISTEMA_MACESA() {
+  return poblarDatosIniciales();
+}
+
+/**
+ * Obtiene la hoja de cálculo de forma segura, ya sea vinculada automáticamente
+ * o mediante el SPREADSHEET_ID configurado.
+ */
+function getSafeSpreadsheet_() {
+  try {
+    const active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (e) {}
+
+  if (typeof SPREADSHEET_ID !== 'undefined' && SPREADSHEET_ID && SPREADSHEET_ID.trim()) {
+    try {
+      return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+    } catch (e) {
+      throw new Error("No se pudo abrir la hoja con el SPREADSHEET_ID proporcionado: " + e.message);
+    }
+  }
+
+  throw new Error(
+    "⚠️ No se detectó ninguna hoja de cálculo activa.\n\n" +
+    "CÓMO SOLUCIONARLO:\n" +
+    "1. Ve a tu Google Sheets en el navegador (ej: sheets.google.com).\n" +
+    "2. En el menú superior haz clic en: Extensiones > Apps Script.\n" +
+    "3. Pega este código ahí y guarda los cambios (Ctrl + S).\n" +
+    "(O si estás usando un script independiente en script.google.com, copia el ID de tu Google Sheet " +
+    "de la URL y pégalo en la variable SPREADSHEET_ID en la línea 26 de este código)."
+  );
+}
+
 // Encabezados estándar de las 4 hojas
 const HEADERS_EMPLEADOS = [
   "ID Empleado",
@@ -169,15 +218,28 @@ const SEED_USUARIOS = [
  * Obtiene una hoja existente o la crea con encabezados estilizados de forma inmediata
  */
 function getOrCreateSheet(ss, sheetName, headers, headerBgColor) {
+  // Si no se proporcionó el objeto spreadsheet (o se ejecutó manualmente desde el botón "Ejecutar")
+  if (!ss || typeof ss.getSheetByName !== 'function') {
+    ss = getSafeSpreadsheet_();
+  }
+
+  // Si se ejecutó directamente la función getOrCreateSheet desde el botón "Ejecutar" del editor
+  if (!sheetName) {
+    Logger.log("getOrCreateSheet fue ejecutada manualmente sin argumentos. Inicializando las 4 hojas...");
+    return poblarDatosIniciales();
+  }
+
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
-    sheet.appendRow(headers);
-    sheet.getRange(1, 1, 1, headers.length)
-      .setBackground(headerBgColor)
-      .setFontColor("#ffffff")
-      .setFontWeight("bold");
-    sheet.setFrozenRows(1);
+    if (headers && headers.length > 0) {
+      sheet.appendRow(headers);
+      sheet.getRange(1, 1, 1, headers.length)
+        .setBackground(headerBgColor || "#1e3a8a")
+        .setFontColor("#ffffff")
+        .setFontWeight("bold");
+      sheet.setFrozenRows(1);
+    }
   }
   return sheet;
 }
@@ -187,7 +249,7 @@ function getOrCreateSheet(ss, sheetName, headers, headerBgColor) {
  * en una sola operación por lote (Tarda menos de 1 segundo).
  */
 function poblarDatosIniciales() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSafeSpreadsheet_();
 
   // 1. Empleados
   const sheetEmp = getOrCreateSheet(ss, "Empleados_Enlaces", HEADERS_EMPLEADOS, "#1e3a8a");
@@ -221,14 +283,21 @@ function poblarDatosIniciales() {
   sheetUsr.getRange(1, 1, 1, HEADERS_USUARIOS.length).setBackground("#b45309").setFontColor("#ffffff").setFontWeight("bold");
   sheetUsr.setFrozenRows(1);
 
-  SpreadsheetApp.getActiveSpreadsheet().toast("✅ Las 4 hojas fueron pobladas exitosamente con los datos iniciales de MACESA en menos de 1 segundo.");
+  try {
+    if (ss && ss.toast) {
+      ss.toast("✅ Las 4 hojas fueron pobladas exitosamente con los datos iniciales de MACESA en menos de 1 segundo.");
+    }
+  } catch (e) {}
+
+  Logger.log("✅ Las 4 hojas fueron pobladas exitosamente con los datos iniciales de MACESA.");
+  return { status: "success", message: "Hojas creadas e inicializadas exitosamente en Google Sheets." };
 }
 
 /**
  * Revisa de manera ultra-rápida si las hojas están vacías para poblarlas
  */
 function setupSheets() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSafeSpreadsheet_();
   const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
   const sheetOt = ss.getSheetByName("HorasExtras_HACCP");
   
@@ -238,39 +307,12 @@ function setupSheets() {
 }
 
 /**
- * Manejador para peticiones GET (Verificación en navegador y lectura rápida)
- */
-function doGet(e) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "get_all_data";
-
-    if (action === "poblar_datos_iniciales") {
-      poblarDatosIniciales();
-    }
-
-    const fullData = readAllDataFromSpreadsheet(ss);
-    return createJsonResponse({
-      status: "success",
-      message: "API Google Sheets HACCP MACESA Activa",
-      timestamp: new Date().toLocaleString(),
-      ...fullData
-    });
-  } catch (err) {
-    return createJsonResponse({
-      status: "error",
-      message: err.toString()
-    });
-  }
-}
-
-/**
  * Manejador principal para peticiones POST (Crear, Actualizar, Eliminar y Leer todo)
  * Optimizado para ejecutar en menos de 200 ms por solicitud.
  */
 function doPost(e) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSafeSpreadsheet_();
 
     // Obtener datos enviados desde la aplicación cliente
     let postData = "{}";
@@ -486,14 +528,28 @@ function doPost(e) {
             periodTitle,
             r.date || "",
             r.day || "",
-            r.horaMatanza || "",
-            r.horaViscera || "",
-            r.horaDeshuese || "",
-            r.horaDescargaCarton || "",
+            formatTimeString(r.horaMatanza),
+            formatTimeString(r.horaViscera),
+            formatTimeString(r.horaDeshuese),
+            formatTimeString(r.horaDescargaCarton),
             r.observaciones || "",
             now
           ]);
         });
+      } else {
+        // Preservar el período nuevo en Google Sheets aunque aún no tenga filas de fechas
+        newRows.push([
+          periodId || periodTitle,
+          periodTitle,
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          now
+        ]);
       }
 
       const finalData = remainingRows.concat(newRows);
@@ -634,13 +690,28 @@ function doPost(e) {
         const sheetProc = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
         const procRows = [HEADERS_PROCESOS];
         data.processControls.forEach(p => {
-          (p.rows || []).forEach(r => {
+          if (p.rows && p.rows.length > 0) {
+            p.rows.forEach(r => {
+              procRows.push([
+                p.periodId || p.periodTitle,
+                p.periodTitle,
+                r.date || "",
+                r.day || "",
+                formatTimeString(r.horaMatanza),
+                formatTimeString(r.horaViscera),
+                formatTimeString(r.horaDeshuese),
+                formatTimeString(r.horaDescargaCarton),
+                r.observaciones || "",
+                now
+              ]);
+            });
+          } else {
             procRows.push([
-              p.periodId || p.periodTitle, p.periodTitle,
-              r.date, r.day, r.horaMatanza, r.horaViscera, r.horaDeshuese, r.horaDescargaCarton,
-              r.observaciones, now
+              p.periodId || p.periodTitle,
+              p.periodTitle,
+              "", "", "", "", "", "", "", now
             ]);
-          });
+          }
         });
         sheetProc.clearContents();
         sheetProc.getRange(1, 1, procRows.length, procRows[0].length).setValues(procRows);
@@ -699,10 +770,14 @@ function doPost(e) {
  */
 function doGet(e) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSafeSpreadsheet_();
     const action = e && e.parameter ? (e.parameter.action || "") : "";
 
-    if (action === "get_all_data" || action === "read") {
+    if (action === "poblar_datos_iniciales") {
+      poblarDatosIniciales();
+    }
+
+    if (action === "get_all_data" || action === "read" || action === "poblar_datos_iniciales") {
       const fullData = readAllDataFromSpreadsheet(ss);
       return createJsonResponse({
         status: "success",
@@ -755,6 +830,9 @@ function deleteRowInMemory(sheet, targetId, idColIndex) {
  * Lee y estructura todos los datos de las 4 hojas de cálculo (1 solo getValues por hoja)
  */
 function readAllDataFromSpreadsheet(ss) {
+  if (!ss || typeof ss.getSheetByName !== 'function') {
+    ss = getSafeSpreadsheet_();
+  }
   // 1. Empleados
   const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
   const employees = [];
@@ -820,6 +898,8 @@ function readAllDataFromSpreadsheet(ss) {
       const pId = String(r[0] || "general").trim();
       const pTitle = String(r[1] || r[0] || "General").trim();
 
+      if (!pId && !pTitle) continue;
+
       if (!periodsMap[pId]) {
         periodsMap[pId] = {
           periodId: pId,
@@ -828,15 +908,18 @@ function readAllDataFromSpreadsheet(ss) {
         };
       }
 
-      periodsMap[pId].rows.push({
-        date: formatDateString(r[2]),
-        day: String(r[3] || ""),
-        horaMatanza: String(r[4] || ""),
-        horaViscera: String(r[5] || ""),
-        horaDeshuese: String(r[6] || ""),
-        horaDescargaCarton: String(r[7] || ""),
-        observaciones: String(r[8] || "")
-      });
+      // Si la fila tiene al menos fecha o alguna hora, agregar a las filas del período
+      if (r[2] || r[4] || r[5] || r[6] || r[7]) {
+        periodsMap[pId].rows.push({
+          date: formatDateString(r[2]),
+          day: String(r[3] || ""),
+          horaMatanza: formatTimeString(r[4]),
+          horaViscera: formatTimeString(r[5]),
+          horaDeshuese: formatTimeString(r[6]),
+          horaDescargaCarton: formatTimeString(r[7]),
+          observaciones: String(r[8] || "")
+        });
+      }
     }
   }
   const processControls = Object.values(periodsMap);
@@ -878,6 +961,28 @@ function formatDateString(val) {
     return `${y}-${m}-${d}`;
   }
   return String(val).trim();
+}
+
+/**
+ * Normaliza cualquier valor de hora de Google Sheets (Date, texto con segundos, etc.)
+ * a formato estricto hh:mm (ej: "15:30")
+ */
+function formatTimeString(val) {
+  if (!val && val !== 0) return "";
+  if (val instanceof Date) {
+    const h = String(val.getHours()).padStart(2, "0");
+    const m = String(val.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  }
+  const str = String(val).trim();
+  if (!str || str === "-" || str.toLowerCase() === "pendiente" || str.toLowerCase() === "sin registro") return "";
+  const match = str.match(/(\d{1,2}):(\d{1,2})/);
+  if (match) {
+    const h = match[1].padStart(2, "0");
+    const m = match[2].padStart(2, "0");
+    return `${h}:${m}`;
+  }
+  return str;
 }
 
 function createJsonResponse(data) {
