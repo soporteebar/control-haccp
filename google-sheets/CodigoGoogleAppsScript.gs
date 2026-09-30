@@ -238,6 +238,33 @@ function setupSheets() {
 }
 
 /**
+ * Manejador para peticiones GET (Verificación en navegador y lectura rápida)
+ */
+function doGet(e) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "get_all_data";
+
+    if (action === "poblar_datos_iniciales") {
+      poblarDatosIniciales();
+    }
+
+    const fullData = readAllDataFromSpreadsheet(ss);
+    return createJsonResponse({
+      status: "success",
+      message: "API Google Sheets HACCP MACESA Activa",
+      timestamp: new Date().toLocaleString(),
+      ...fullData
+    });
+  } catch (err) {
+    return createJsonResponse({
+      status: "error",
+      message: err.toString()
+    });
+  }
+}
+
+/**
  * Manejador principal para peticiones POST (Crear, Actualizar, Eliminar y Leer todo)
  * Optimizado para ejecutar en menos de 200 ms por solicitud.
  */

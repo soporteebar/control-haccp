@@ -14,10 +14,85 @@ const EmpleadoApp = {
   init() {
     this.initSignature();
     this.bindEvents();
+    this.initLiveSync();
     this.checkEmployeeAuth();
     this.setDefaultDate();
     this.updateHoursCalculation();
     this.updateWordCount();
+  },
+
+  initLiveSync() {
+    DB.init();
+
+    // Actualizar banner de conexión
+    if (DB.SyncEngine) {
+      DB.SyncEngine.onSyncStateChange((state, detail) => {
+        this.updateSyncUI(state, detail);
+      });
+
+      DB.SyncEngine.onDataUpdated((summary) => {
+        console.log('🔄 EmpleadoApp detectó cambios en Google Sheets');
+        if (!this.currentEmployee) {
+          this.checkEmployeeAuth();
+        } else {
+          this.renderHistory();
+        }
+      });
+
+      this.updateSyncUI(DB.SyncEngine.currentState);
+    }
+
+    const btnRefresh = document.getElementById('btnEmpQuickRefresh');
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', async () => {
+        btnRefresh.textContent = '⏳ Cargando...';
+        btnRefresh.disabled = true;
+        try {
+          await DB.loadAllFromGoogleSheets();
+          if (this.currentEmployee) {
+            this.renderHistory();
+          } else {
+            this.checkEmployeeAuth();
+          }
+        } finally {
+          btnRefresh.textContent = '🔄 Refrescar';
+          btnRefresh.disabled = false;
+        }
+      });
+    }
+
+    // Consulta inicial a Google Sheets para refrescar directorio de colaboradores y procesos
+    const conf = DB.getConfig();
+    if (conf.googleSheetsUrl) {
+      DB.loadAllFromGoogleSheets({ silent: true }).then(() => {
+        if (!this.currentEmployee) {
+          this.checkEmployeeAuth();
+        } else {
+          this.renderHistory();
+        }
+      });
+    }
+  },
+
+  updateSyncUI(state, detail = null) {
+    const banner = document.getElementById('empSyncBanner');
+    const dot = document.getElementById('empSyncDot');
+    const text = document.getElementById('empSyncText');
+    if (!banner || !dot || !text) return;
+
+    if (state === 'syncing') {
+      dot.className = 'inline-block w-2 h-2 rounded-full bg-amber-400 animate-spin';
+      text.textContent = 'Sincronizando con Google Sheets...';
+    } else if (state === 'synced') {
+      dot.className = 'inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+      text.textContent = 'Conectado con Google Sheets | En tiempo real';
+    } else if (state === 'error') {
+      dot.className = 'inline-block w-2 h-2 rounded-full bg-rose-500';
+      text.textContent = 'Modo Local / Reconectando...';
+    } else {
+      dot.className = 'inline-block w-2 h-2 rounded-full bg-slate-400';
+      text.textContent = 'Google Sheets no configurado';
+    }
   },
 
   initSignature() {
@@ -291,7 +366,7 @@ const EmpleadoApp = {
     }
   },
 
-  saveRecord() {
+  async saveRecord() {
     if (!this.currentEmployee) {
       alert('Por favor selecciona un empleado primero.');
       return;
@@ -350,32 +425,48 @@ const EmpleadoApp = {
       signature
     };
 
-    DB.saveRecord(record);
-
-    // Guardar registro de vacaciones si aplica
-    if (hadVacation && vacDays > 0) {
-      DB.saveVacation({
-        employeeId: this.currentEmployee.id,
-        taken: true,
-        fromDate: vacFrom,
-        toDate: vacTo,
-        daysCount: vacDays,
-        notes: `Registrado en boleta de fecha ${dateVal}`
-      });
+    const submitBtn = document.querySelector('#overtimeForm button[type="submit"]');
+    const oldBtnText = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Guardando en Google Sheets...';
     }
 
-    // Limpiar formulario y notificar
-    document.getElementById('justificationInput').value = '';
-    this.updateWordCount();
-    if (this.signaturePad) this.signaturePad.clear();
+    try {
+      await DB.saveRecordAsync(record);
 
-    const toast = document.getElementById('successToast');
-    if (toast) {
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 4500);
+      // Guardar registro de vacaciones si aplica
+      if (hadVacation && vacDays > 0) {
+        DB.saveVacation({
+          employeeId: this.currentEmployee.id,
+          taken: true,
+          fromDate: vacFrom,
+          toDate: vacTo,
+          daysCount: vacDays,
+          notes: `Registrado en boleta de fecha ${dateVal}`
+        });
+      }
+
+      // Limpiar formulario y notificar
+      document.getElementById('justificationInput').value = '';
+      this.updateWordCount();
+      if (this.signaturePad) this.signaturePad.clear();
+
+      const toast = document.getElementById('successToast');
+      if (toast) {
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 4500);
+      }
+
+      this.renderHistory();
+    } catch (err) {
+      alert('Error guardando en Google Sheets: ' + err.message);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = oldBtnText;
+      }
     }
-
-    this.renderHistory();
   },
 
   renderHistory() {
@@ -507,9 +598,9 @@ const EmpleadoApp = {
     }
   },
 
-  deleteRecord(id) {
-    if (confirm('¿Seguro que deseas eliminar este registro de horas extras?')) {
-      DB.deleteRecord(id);
+  async deleteRecord(id) {
+    if (confirm('¿Seguro que deseas eliminar este registro de horas extras? Se eliminará de Google Sheets.')) {
+      await DB.deleteRecordAsync(id);
       this.renderHistory();
     }
   }

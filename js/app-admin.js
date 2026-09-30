@@ -30,6 +30,106 @@ const AdminApp = {
     this.bindRecordModals();
     this.bindModals();
     ProcesosModule.init();
+    this.initLiveSync();
+  },
+
+  initLiveSync() {
+    DB.init();
+
+    // Actualizar indicador visual al cambiar estado de sincronización
+    if (DB.SyncEngine) {
+      DB.SyncEngine.onSyncStateChange((state, detail) => {
+        this.updateSyncUI(state, detail);
+      });
+
+      // Re-renderizado reactivo cuando se detectan cambios desde Google Sheets
+      DB.SyncEngine.onDataUpdated((summary) => {
+        this.handleRemoteDataUpdate(summary);
+      });
+
+      // Chequeo inicial del estado
+      this.updateSyncUI(DB.SyncEngine.currentState);
+    }
+
+    // Botón de refresco rápido en el header
+    const btnPullHeader = document.getElementById('btnPullSheetsHeader');
+    if (btnPullHeader) {
+      btnPullHeader.onclick = () => this.pullDataFromGoogleSheets();
+    }
+
+    // Si hay URL configurada, lanzar sincronización inicial
+    const conf = DB.getConfig();
+    if (conf.googleSheetsUrl && DB.SyncEngine) {
+      DB.SyncEngine.pollChanges({ immediate: true, silent: false });
+    }
+  },
+
+  updateSyncUI(state, detail = null) {
+    const badge = document.getElementById('liveSyncStatusBadge');
+    const dot = document.getElementById('syncPulseDot');
+    const text = document.getElementById('syncStatusText');
+    const timeText = document.getElementById('syncLastTimeText');
+    const iconHeader = document.getElementById('iconPullHeader');
+
+    if (!badge || !dot || !text) return;
+    badge.classList.remove('hidden');
+
+    if (state === 'syncing') {
+      dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-amber-400 animate-spin';
+      text.textContent = 'Google Sheets: Sincronizando...';
+      if (iconHeader) iconHeader.classList.add('animate-spin');
+    } else if (state === 'synced') {
+      dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+      text.textContent = 'Google Sheets: En Línea';
+      if (timeText) {
+        timeText.textContent = `· ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+      }
+      if (iconHeader) iconHeader.classList.remove('animate-spin');
+    } else if (state === 'error') {
+      dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-rose-500';
+      text.textContent = 'Google Sheets: Error conexión';
+      if (iconHeader) iconHeader.classList.remove('animate-spin');
+    } else {
+      dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-slate-400';
+      text.textContent = 'Google Sheets: Configurar';
+      if (iconHeader) iconHeader.classList.remove('animate-spin');
+    }
+  },
+
+  handleRemoteDataUpdate(summary) {
+    console.log('🔄 Actualizando interfaz con datos frescos de Google Sheets:', summary);
+    this.populateEmployeeFilters();
+
+    if (this.activeTab === 'tab-dashboard') {
+      this.renderDashboard();
+    } else if (this.activeTab === 'tab-empleados') {
+      this.renderEmployees();
+    } else if (this.activeTab === 'tab-config') {
+      this.renderAdminUsers();
+    } else if (this.activeTab === 'tab-procesos' && window.ProcesosModule) {
+      ProcesosModule.loadPeriods();
+    }
+
+    // Toast flotante no invasivo
+    this.showSyncToast('🔄 Datos actualizados en vivo desde Google Sheets');
+  },
+
+  showSyncToast(message) {
+    let toast = document.getElementById('adminLiveSyncToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'adminLiveSyncToast';
+      toast.className = 'fixed bottom-4 right-4 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 border border-slate-700 transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none';
+      document.body.appendChild(toast);
+    }
+    toast.innerHTML = `
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+      <span>${message}</span>
+    `;
+    toast.classList.remove('translate-y-10', 'opacity-0');
+    setTimeout(() => {
+      toast.classList.add('translate-y-10', 'opacity-0');
+    }, 3500);
   },
 
   checkAdminAuth() {
@@ -549,19 +649,23 @@ const AdminApp = {
     ExcelExport.exportEmployeeOvertime(emp, records, vacations);
   },
 
-  deleteEmployee(id) {
-    if (confirm('¿Deseas eliminar este empleado? Sus registros se mantendrán pero ya no aparecerá activo.')) {
-      DB.deleteEmployee(id);
+  async deleteEmployee(id) {
+    if (confirm('¿Deseas eliminar este empleado? Se eliminará de Google Sheets y del sistema.')) {
+      this.showSyncToast('⏳ Eliminando empleado de Google Sheets...');
+      await DB.deleteEmployeeAsync(id);
       this.populateEmployeeFilters();
       this.renderEmployees();
       this.renderDashboard();
+      this.showSyncToast('🗑️ Empleado eliminado en Google Sheets con éxito.');
     }
   },
 
-  deleteRecord(id) {
+  async deleteRecord(id) {
     if (confirm('¿Seguro que deseas eliminar este registro de horas extras?')) {
-      DB.deleteRecord(id);
+      this.showSyncToast('⏳ Eliminando registro de Google Sheets...');
+      await DB.deleteRecordAsync(id);
       this.renderDashboard();
+      this.showSyncToast('🗑️ Registro eliminado en Google Sheets con éxito.');
     }
   },
 
@@ -654,12 +758,45 @@ const AdminApp = {
       inputUrl.value = config.googleSheetsUrl || '';
     }
 
+    const chkAutoSync = document.getElementById('chkAutoSyncEnabled');
+    if (chkAutoSync) {
+      chkAutoSync.checked = config.autoSyncEnabled !== false;
+      chkAutoSync.addEventListener('change', () => {
+        const current = DB.getConfig();
+        DB.saveConfig({ ...current, autoSyncEnabled: chkAutoSync.checked });
+        this.showSyncToast(chkAutoSync.checked ? '🟢 Auto-refresco en vivo activado' : '⏸️ Auto-refresco en vivo pausado');
+      });
+    }
+
+    const selectInterval = document.getElementById('selectAutoSyncInterval');
+    if (selectInterval) {
+      if (config.autoRefreshIntervalMs) {
+        selectInterval.value = String(config.autoRefreshIntervalMs);
+      }
+      selectInterval.addEventListener('change', () => {
+        const current = DB.getConfig();
+        const ms = parseInt(selectInterval.value, 10) || 30000;
+        DB.saveConfig({ ...current, autoRefreshIntervalMs: ms });
+        this.showSyncToast(`⏱️ Frecuencia de auto-refresco: ${ms / 1000}s`);
+      });
+    }
+
     const btnSave = document.getElementById('btnSaveConfig');
     if (btnSave) {
-      btnSave.addEventListener('click', () => {
+      btnSave.addEventListener('click', async () => {
         const val = (document.getElementById('googleSheetsUrlInput')?.value || '').trim();
-        DB.saveConfig({ ...config, googleSheetsUrl: val });
-        alert('✅ Configuración de Google Sheets guardada correctamente.');
+        const autoSync = document.getElementById('chkAutoSyncEnabled') ? document.getElementById('chkAutoSyncEnabled').checked : true;
+        const intervalMs = document.getElementById('selectAutoSyncInterval') ? (parseInt(document.getElementById('selectAutoSyncInterval').value, 10) || 30000) : 30000;
+
+        DB.saveConfig({
+          ...config,
+          googleSheetsUrl: val,
+          autoSyncEnabled: autoSync,
+          autoRefreshIntervalMs: intervalMs
+        });
+
+        alert('✅ Configuración de Google Sheets guardada correctamente. Se inició la sincronización en vivo.');
+        await this.pullDataFromGoogleSheets();
       });
     }
 
@@ -906,7 +1043,7 @@ const AdminApp = {
     }
 
     if (form) {
-      form.addEventListener('submit', (e) => {
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const id = document.getElementById('adminUserEditId')?.value?.trim() || '';
         const name = document.getElementById('adminUserFullName')?.value?.trim() || '';
@@ -932,11 +1069,27 @@ const AdminApp = {
         if (id) userData.id = id;
         if (password) userData.password = password;
 
-        DB.saveAdminUser(userData);
-        modal.classList.add('hidden');
-        form.reset();
-        this.renderAdminUsers();
-        alert(`✅ Usuario "${username}" (${role === 'admin' ? 'Administrador' : 'Visor'}) guardado con éxito.`);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const oldText = submitBtn ? submitBtn.textContent : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = '⏳ Guardando en Google Sheets...';
+        }
+
+        try {
+          await DB.saveAdminUserAsync(userData);
+          modal.classList.add('hidden');
+          form.reset();
+          this.renderAdminUsers();
+          this.showSyncToast(`✅ Usuario "${username}" guardado en Google Sheets.`);
+        } catch (err) {
+          alert('Error al guardar usuario: ' + err.message);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = oldText;
+          }
+        }
       });
     }
   },
@@ -965,7 +1118,7 @@ const AdminApp = {
     modal.classList.remove('hidden');
   },
 
-  deleteAdminUser(id) {
+  async deleteAdminUser(id) {
     const users = DB.getAdminUsers();
     const user = users.find(u => u.id === id);
     if (!user) return;
@@ -975,11 +1128,11 @@ const AdminApp = {
       return;
     }
 
-    if (confirm(`¿Seguro que deseas eliminar al usuario "${user.username}" (${user.role})?`)) {
-      if (DB.deleteAdminUser(id)) {
-        this.renderAdminUsers();
-        alert('Usuario eliminado del panel.');
-      }
+    if (confirm(`¿Seguro que deseas eliminar al usuario "${user.username}" (${user.role})? Se eliminará de Google Sheets.`)) {
+      this.showSyncToast('⏳ Eliminando usuario de Google Sheets...');
+      await DB.deleteAdminUserAsync(id);
+      this.renderAdminUsers();
+      this.showSyncToast('🗑️ Usuario eliminado en Google Sheets con éxito.');
     }
   },
 
@@ -1107,7 +1260,7 @@ const AdminApp = {
     }
 
     if (form) {
-      form.addEventListener('submit', (e) => {
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const id = document.getElementById('recordEditId')?.value?.trim();
         const employeeId = document.getElementById('recordEditEmployee')?.value;
@@ -1152,11 +1305,26 @@ const AdminApp = {
           }
         }
 
-        DB.saveRecord(recordData);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const oldText = submitBtn ? submitBtn.textContent : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = '⏳ Guardando en Google Sheets...';
+        }
 
-        if (modal) modal.classList.add('hidden');
-        this.renderDashboard();
-        alert(id ? '✅ Registro de horas actualizado y sincronizado.' : '✅ Registro de horas creado y sincronizado.');
+        try {
+          await DB.saveRecordAsync(recordData);
+          if (modal) modal.classList.add('hidden');
+          this.renderDashboard();
+          this.showSyncToast(id ? '✅ Registro de horas actualizado en Google Sheets.' : '✅ Registro de horas guardado en Google Sheets.');
+        } catch (err) {
+          alert('Error al guardar registro: ' + err.message);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = oldText;
+          }
+        }
       });
     }
   },
@@ -1185,7 +1353,7 @@ const AdminApp = {
     }
 
     if (formCreate) {
-      formCreate.addEventListener('submit', (e) => {
+      formCreate.addEventListener('submit', async (e) => {
         e.preventDefault();
         const editId = document.getElementById('empEditId')?.value?.trim();
         const name = document.getElementById('empNewName').value.trim();
@@ -1217,16 +1385,31 @@ const AdminApp = {
           }
         }
 
-        DB.saveEmployee(empData);
+        const submitBtn = formCreate.querySelector('button[type="submit"]');
+        const oldText = submitBtn ? submitBtn.textContent : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = '⏳ Guardando en Google Sheets...';
+        }
 
-        modalCreate.classList.add('hidden');
-        formCreate.reset();
-        this.populateEmployeeFilters();
-        this.renderEmployees();
-        this.renderDashboard();
-        alert(editId 
-          ? `✅ Empleado "${name}" actualizado y sincronizado en Google Sheets.` 
-          : `✅ Empleado "${name}" creado con éxito y sincronizado en Google Sheets.`);
+        try {
+          await DB.saveEmployeeAsync(empData);
+          modalCreate.classList.add('hidden');
+          formCreate.reset();
+          this.populateEmployeeFilters();
+          this.renderEmployees();
+          this.renderDashboard();
+          this.showSyncToast(editId 
+            ? `✅ Empleado "${name}" actualizado en Google Sheets.` 
+            : `✅ Empleado "${name}" creado en Google Sheets.`);
+        } catch (err) {
+          alert('Error al guardar empleado: ' + err.message);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = oldText;
+          }
+        }
       });
     }
 

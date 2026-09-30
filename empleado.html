@@ -88,6 +88,17 @@
         </div>
       </div>
 
+      <!-- Banner de Estado de Conexión en Vivo con Google Sheets -->
+      <div id="empSyncBanner" class="bg-emerald-950 text-emerald-200 text-xs py-1.5 px-4 flex items-center justify-between border-b border-emerald-800">
+        <span class="flex items-center gap-1.5 font-medium">
+          <span id="empSyncDot" class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="empSyncText">Conectado con Google Sheets | Guardado en tiempo real</span>
+        </span>
+        <button type="button" id="btnEmpQuickRefresh" class="text-[11px] bg-emerald-800 hover:bg-emerald-700 text-white px-2 py-0.5 rounded font-bold transition-colors">
+          🔄 Refrescar
+        </button>
+      </div>
+
       <!-- Resumen Superior de Horas Acumuladas -->
       <div class="bg-blue-50 border-b border-blue-100 p-4 flex items-center justify-between">
         <div>
@@ -411,6 +422,7 @@
   </div>
 
   <!-- Scripts -->
+  <script src="js/config.js"></script>
   <script src="js/db.js"></script>
   <script src="js/signature.js"></script>
   <script src="js/excel-export.js"></script>

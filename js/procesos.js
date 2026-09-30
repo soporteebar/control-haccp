@@ -10,6 +10,21 @@ const ProcesosModule = {
   init() {
     this.bindEvents();
     this.loadPeriods();
+
+    if (typeof DB !== 'undefined' && DB.SyncEngine) {
+      DB.SyncEngine.onDataUpdated(() => {
+        // Auto-refrescar si el usuario no está editando activamente celdas
+        const active = document.activeElement;
+        const isEditing = active && active.closest && active.closest('#processTableBody');
+        if (!isEditing) {
+          const currentId = this.currentPeriodId;
+          this.loadPeriods();
+          if (currentId && DB.getProcessControlByPeriod(currentId)) {
+            this.selectPeriod(currentId);
+          }
+        }
+      });
+    }
   },
 
   bindEvents() {
@@ -195,7 +210,7 @@ const ProcesosModule = {
     }
   },
 
-  deleteCurrentPeriod() {
+  async deleteCurrentPeriod() {
     if (!this.currentPeriodId) {
       alert('No hay ningún período seleccionado para eliminar.');
       return;
@@ -205,16 +220,37 @@ const ProcesosModule = {
     const title = period ? period.periodTitle : this.currentPeriodId;
 
     if (confirm(`¿Estás seguro de que deseas eliminar permanentemente el período "${title}" y todos sus registros de procesos?`)) {
-      DB.deleteProcessControl(this.currentPeriodId);
-      alert(`✅ Período "${title}" eliminado exitosamente.`);
-      this.loadPeriods();
-      if (window.AdminApp && typeof window.AdminApp.renderDashboard === 'function') {
-        window.AdminApp.renderDashboard();
+      const btn = document.getElementById('btnDeletePeriod');
+      const origText = btn ? btn.textContent : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Eliminando...';
+      }
+
+      try {
+        if (typeof DB.deleteProcessControlAsync === 'function') {
+          await DB.deleteProcessControlAsync(this.currentPeriodId);
+        } else {
+          DB.deleteProcessControl(this.currentPeriodId);
+        }
+        alert(`✅ Período "${title}" eliminado de Google Sheets y almacenamiento local.`);
+        this.loadPeriods();
+        if (window.AdminApp && typeof window.AdminApp.renderDashboard === 'function') {
+          window.AdminApp.renderDashboard();
+        }
+      } catch (err) {
+        console.error('Error eliminando período:', err);
+        alert('❌ Error al eliminar: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
       }
     }
   },
 
-  saveCurrentPeriod() {
+  async saveCurrentPeriod() {
     if (!this.currentPeriodId) {
       alert('No hay ningún período activo para guardar.');
       return;
@@ -223,8 +259,37 @@ const ProcesosModule = {
     if (!period) return;
 
     period.rows = this.currentRows;
-    DB.saveProcessControl(period);
-    alert('✅ Control de Salida de Procesos guardado exitosamente.');
+
+    const btn = document.getElementById('btnSaveProcesses');
+    const origText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Guardando en Google Sheets...';
+    }
+
+    try {
+      if (typeof DB.saveProcessControlAsync === 'function') {
+        const res = await DB.saveProcessControlAsync(period);
+        if (res && res.success) {
+          if (res.cloudSynced) {
+            alert('✅ Control de Salida de Procesos guardado y sincronizado en Google Sheets.');
+          } else {
+            alert('⚠️ Guardado localmente. Sin conexión a Google Sheets: ' + (res.error || 'Verifica la URL'));
+          }
+        }
+      } else {
+        DB.saveProcessControl(period);
+        alert('✅ Control de Salida de Procesos guardado exitosamente.');
+      }
+    } catch (err) {
+      console.error('Error guardando proceso:', err);
+      alert('❌ Error al guardar: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
+    }
   },
 
   exportToExcel() {
@@ -238,7 +303,7 @@ const ProcesosModule = {
     ExcelExport.exportProcessControl(period);
   },
 
-  showNewPeriodModal() {
+  async showNewPeriodModal() {
     const title = prompt('Ingresa el título o rango del nuevo período (ej: 11/10/2026 al 25/10/2026):');
     if (!title || !title.trim()) return;
 
@@ -249,7 +314,11 @@ const ProcesosModule = {
       rows: []
     };
 
-    DB.saveProcessControl(newPeriod);
+    if (typeof DB.saveProcessControlAsync === 'function') {
+      await DB.saveProcessControlAsync(newPeriod);
+    } else {
+      DB.saveProcessControl(newPeriod);
+    }
     this.loadPeriods();
     this.selectPeriod(periodId);
   }

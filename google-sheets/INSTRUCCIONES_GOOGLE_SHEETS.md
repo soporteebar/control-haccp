@@ -38,7 +38,23 @@ Esta integración permite centralizar **toda la información de la empresa** en 
 
 ---
 
-## Paso 4: Configurar la URL en el Panel Web
+## Paso 4: Configurar la URL en el Panel Web o en js/config.js
+Puedes configurar la URL de dos maneras sencillas:
+
+### Opción A (Recomendada para GitHub Pages y Celulares):
+1. Abre el archivo [`js/config.js`](../js/config.js).
+2. Pega tu URL de Google Apps Script en `googleSheetsUrl`:
+   ```javascript
+   window.HACCP_DEFAULT_CONFIG = {
+     googleSheetsUrl: 'https://script.google.com/macros/s/TU_SCRIPT_ID/exec',
+     autoRefreshIntervalMs: 30000, // Refresco automático cada 30 segundos
+     autoSyncEnabled: true,
+     companyName: 'MATADERO CENTRAL S.A. (MACESA)'
+   };
+   ```
+3. Guarda el archivo y súbelo a GitHub. ¡Todos los colaboradores y administradores estarán conectados automáticamente sin configurar nada en sus navegadores!
+
+### Opción B (Desde el Panel Web en tiempo real):
 1. Abre el panel de administración en [`index.html`](../index.html) (en local o en GitHub Pages).
 2. Ve a la **Pestaña 4: Configuración & Sincronización Google Sheets**.
 3. Pega la URL en el campo y pulsa **"Guardar URL"**.
@@ -48,6 +64,16 @@ Esta integración permite centralizar **toda la información de la empresa** en 
    * Alimentará el directorio de empleados con sus enlaces directos para WhatsApp.
    * Guardará todos los períodos de salida de procesos y registros de horas extras.
    * Creará las cuentas de acceso iniciales en la hoja `Usuarios_Panel`.
+
+---
+
+## ⚡ Refresco Automático y Bidireccional (Live Cloud Sync)
+* **Inserción Web &rarr; Google Sheets**: Cada vez que se crea o edita un registro en el portal web (empleado o admin), los cambios se envían a Google Sheets de inmediato con confirmación visual.
+* **Google Sheets &rarr; Web**: El sistema cuenta con **detección inteligente de cambios en la nube**:
+  1. Sondeo periódico en segundo plano (cada 30 segundos por defecto, configurable en la pestaña 4).
+  2. Detección instantánea al cambiar de pestaña o volver a enfocar el navegador (`window focus` / `visibilitychange`).
+  3. Si modificas celdas directamente en Google Sheets, el sitio web detecta la actualización sin que tengas que recargar la página manualmente y actualiza tablas, métricas e historial al instante.
+  4. Los reportes y boletas de Excel exportados incluyen la fecha y hora exacta de sincronización con Google Sheets.
 
 ---
 

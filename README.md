@@ -8,22 +8,51 @@ Permite digitalizar íntegramente los dos documentos operativos oficiales:
 
 ---
 
-## Estructura de la Aplicación
+## Estructura de la Aplicación y Archivos del Proyecto
 
-- **[`index.html`](index.html)**: Panel de Administración & Vista Gerencial.
-  - Dashboard interactivo con métricas acumuladas (KPIs) y gráficos por colaborador y proceso.
-  - Módulo completo de **Control de Salida de Procesos** (Imagen 1) editable y exportable a Excel.
-  - Creador y gestor de empleados con generador de enlaces móviles directos y códigos QR para WhatsApp.
-  - Exportación consolidada para nómina y Recursos Humanos.
-  - Conector para sincronización con **Google Sheets**.
-- **[`empleado.html`](empleado.html)**: Portal móvil exclusivo para el empleado.
-  - Acceso directo mediante enlace personalizado (ej: `empleado.html?emp=emp_01`).
-  - Selector intuitivo de horas y minutos con conversión decimal en tiempo real.
-  - Contador dinámico de palabras y caracteres para justificaciones extensas (>300 palabras).
-  - Selector de vacaciones tomadas (SÍ/NO, rango de fechas y cómputo de días).
-  - Lienzo (Canvas) para firma digital en teléfonos móviles o PC.
-  - Descarga de boleta individual en Excel (.xlsx) o impresión en PDF.
-- **[`google-sheets/`](google-sheets/)**: Código y guía para conectar gratis una hoja de cálculo en Google Drive como base de datos en la nube.
+```text
+control-haccp-procesos/
+│
+├── index.html                           # Panel de Administración y Vista Gerencial
+├── empleado.html                        # Portal Móvil de Reporte para Empleados (WhatsApp)
+├── README.md                            # Documentación general y despliegue
+│
+├── js/
+│   ├── config.js                        # Configuración global (URL Google Sheets, polling)
+│   ├── db.js                            # Base de datos centralizada + SyncEngine bidireccional
+│   ├── app-admin.js                     # Controlador del Panel Admin (CRUD async, gráficos, KPIs)
+│   ├── app-empleado.js                  # Controlador del Portal Empleado (CRUD async, firma)
+│   ├── procesos.js                      # Módulo de Control de Salida de Procesos (Matanza, Vísceras, etc.)
+│   ├── excel-export.js                  # Exportador a Excel (.xlsx) oficial de MACESA
+│   ├── signature.js                     # Manejador de firma digital táctil con SignaturePad
+│   └── time-utils.js                    # Utilidades de conversión y formateo de horas/fechas
+│
+├── css/
+│   ├── app.css                          # Estilos personalizados y utilidades visuales
+│   └── print.css                        # Estilos para impresión física de boletas en 1 hoja
+│
+├── assets/
+│   ├── logo-macesa.svg                  # Isologotipo oficial de MACESA
+│   └── vendor/                          # Librerías locales para ejecución offline o sin CDN
+│       ├── xlsx.full.min.js             # SheetJS para generación de Excel
+│       └── chart.umd.min.js             # Chart.js para gráficos gerenciales
+│
+└── google-sheets/
+    ├── CodigoGoogleAppsScript.gs        # Backend en la nube (Apps Script v5.0 - Cero Timeouts)
+    └── INSTRUCCIONES_GOOGLE_SHEETS.md   # Manual paso a paso para desplegar el backend
+```
+
+---
+
+## ☁️ Arquitectura con Google Sheets (Base de Datos en la Nube)
+
+1. **Fuente de Verdad Única**: Toda la información (`Empleados_Enlaces`, `HorasExtras_HACCP`, `SalidaProcesos`, `Usuarios_Panel`) se almacena y consulta directamente desde Google Sheets.
+2. **Reflejo Inmediato**: Cada inserción, edición o eliminación en la web se envía a Google Sheets en tiempo real con retroalimentación visual (`⏳ Guardando en Google Sheets...`).
+3. **Refresco Automático en Vivo (Live Polling + Focus Detection)**:
+   - Si se modifica una celda directamente en Google Sheets, el sitio web detecta el cambio automáticamente sin necesidad de recargar la página.
+   - Cuenta con sondeo en segundo plano (cada 30 segundos) y sincronización al reenfocar la ventana (`focus` y `visibilitychange`).
+4. **Reportes Confiables**: Los reportes exportados en Excel (.xlsx) y para impresión física se generan con los datos actualizados de la nube y sellan la hora exacta de sincronización.
+5. **Cero Timeouts (<200 ms)**: Procesamiento en memoria y escrituras masivas en lote (`setValues`).
 
 ---
 
@@ -34,10 +63,20 @@ Permite digitalizar íntegramente los dos documentos operativos oficiales:
 
 ---
 
-## Cómo Publicar en GitHub Pages (Paso a Paso)
+## Cómo Publicar en GitHub Pages (Archivos a Subir)
 
+Para publicar el sistema en GitHub Pages, **debes subir la carpeta completa del proyecto**:
+- `index.html`
+- `empleado.html`
+- `README.md`
+- Carpeta `js/` (con todos sus archivos, especialmente `config.js`, `db.js`, etc.)
+- Carpeta `css/` (con `app.css` y `print.css`)
+- Carpeta `assets/` (con logo y vendor)
+- Carpeta `google-sheets/` (para tu respaldo del script)
+
+### Pasos de Publicación:
 1. Crea un repositorio nuevo en tu cuenta de GitHub (ej: `control-haccp-macesa`).
-2. Sube todos los archivos de esta carpeta al repositorio (`git add .`, `git commit -m "Sistema HACCP"`, `git push origin main`).
+2. Sube todos los archivos de esta carpeta al repositorio (`git add .`, `git commit -m "Sistema HACCP v5.0 Nube"`, `git push origin main`).
 3. En la página de tu repositorio en GitHub, ve a **Settings** (Configuración) &rarr; pestaña **Pages** en el menú izquierdo.
 4. En **Build and deployment &rarr; Branch**, selecciona `main` (o `master`) y carpeta `/(root)`.
 5. Haz clic en **Save**.

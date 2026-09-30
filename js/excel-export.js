@@ -111,6 +111,12 @@ const ExcelExport = {
       ''
     ]);
 
+    const syncTime = (typeof DB !== 'undefined' && DB.SyncEngine && DB.SyncEngine.lastSyncTime)
+      ? DB.SyncEngine.lastSyncTime.toLocaleString('es-ES')
+      : new Date().toLocaleString('es-ES');
+    wsData.push([]);
+    wsData.push([`Documento emitido conforme a datos sincronizados en Google Sheets (${syncTime})`, '', '', '', '']);
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
     // Anchos de columnas optimizados para ajustar perfectamente en 1 hoja carta vertical
@@ -148,7 +154,8 @@ const ExcelExport = {
       { s: { r: sigLineIdx + 1, c: 0 }, e: { r: sigLineIdx + 1, c: 1 } },
       { s: { r: sigLineIdx + 1, c: 3 }, e: { r: sigLineIdx + 1, c: 4 } },
       { s: { r: sigLineIdx + 2, c: 0 }, e: { r: sigLineIdx + 2, c: 1 } },
-      { s: { r: sigLineIdx + 2, c: 3 }, e: { r: sigLineIdx + 2, c: 4 } }
+      { s: { r: sigLineIdx + 2, c: 3 }, e: { r: sigLineIdx + 2, c: 4 } },
+      { s: { r: sigLineIdx + 4, c: 0 }, e: { r: sigLineIdx + 4, c: 4 } } // Nota de sincronización Google Sheets
     ];
 
     // Configuración para impresión directa en 1 hoja carta/A4 en Excel
@@ -207,6 +214,12 @@ const ExcelExport = {
       ]);
     });
 
+    const syncTimeProc = (typeof DB !== 'undefined' && DB.SyncEngine && DB.SyncEngine.lastSyncTime)
+      ? DB.SyncEngine.lastSyncTime.toLocaleString('es-ES')
+      : new Date().toLocaleString('es-ES');
+    wsData.push([]);
+    wsData.push([`Fuente: Sincronizado en la Nube con Google Sheets (${syncTimeProc})`]);
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
     // Ajustar anchos
@@ -263,6 +276,12 @@ const ExcelExport = {
 
     wsData.push([]);
     wsData.push(['TOTAL GENERAL:', '', '', '', '', Math.round(grandTotal * 100) / 100, TimeUtils.toHuman(grandTotal)]);
+
+    const syncTimeCons = (typeof DB !== 'undefined' && DB.SyncEngine && DB.SyncEngine.lastSyncTime)
+      ? DB.SyncEngine.lastSyncTime.toLocaleString('es-ES')
+      : new Date().toLocaleString('es-ES');
+    wsData.push([]);
+    wsData.push([`Fuente: Sincronizado en la Nube con Google Sheets (${syncTimeCons})`]);
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
