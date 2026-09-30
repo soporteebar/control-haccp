@@ -19,7 +19,7 @@ window.HACCP_DEFAULT_CONFIG = {
   autoSyncEnabled: true,
 
   // Nombre oficial de la empresa
-  companyName: 'MATADERO CENTRAL S.A. (MACESA)',
+  companyName: 'HACCP',
 
   // Versión del conector
   version: '5.0-live'
