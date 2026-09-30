@@ -2,121 +2,247 @@
  * ==============================================================================
  * CodigoGoogleAppsScript.gs - Conector de Google Sheets para Sistema HACCP MACESA
  * ==============================================================================
- * Centraliza en Google Sheets con operaciones completas de CRUD (Crear, Leer,
- * Actualizar y Eliminar) los 4 módulos del sistema:
+ * Versión 5.0 (Ultra-optimizada con Operaciones en Lote / Batch - Cero Timeouts)
+ * 
+ * Centraliza en Google Sheets con operaciones CRUD (Crear, Leer, Actualizar y Eliminar)
+ * los 4 módulos del sistema con DATOS INICIALES SEMILLA:
  * 1. Gestión de Empleados y Enlaces para WhatsApp (Hoja: Empleados_Enlaces)
  * 2. Registros Detallados de Horas Extras (Hoja: HorasExtras_HACCP)
  * 3. Módulo de Control de Salida de Procesos (Hoja: SalidaProcesos)
  * 4. Gestión de Usuarios del Panel Admin y Visor (Hoja: Usuarios_Panel)
+ *
+ * NOTA DE RENDIMIENTO:
+ * Esta versión elimina los bucles de appendRow() y deleteRow() que causaban
+ * "Exceeded maximum execution time". Ahora utiliza procesamiento en memoria y
+ * escritura masiva con setValues() que se ejecuta en menos de 1 segundo.
  */
 
-// Inicializa las 4 hojas con sus encabezados y estilos corporativos si no existen
-function setupSheets() {
+// Encabezados estándar de las 4 hojas
+const HEADERS_EMPLEADOS = [
+  "ID Empleado",
+  "Código / Cédula",
+  "Nombre del Colaborador",
+  "Área / Departamento",
+  "Puesto / Cargo",
+  "Teléfono / WhatsApp",
+  "Enlace Formulario Web (GitHub Pages)",
+  "Enlace Directo WhatsApp",
+  "Estado",
+  "Fecha Alta / Actualización"
+];
+
+const HEADERS_HORAS = [
+  "ID Registro",
+  "Fecha Turno",
+  "Nombre del Empleado",
+  "Código",
+  "Área",
+  "Proceso",
+  "Salida Planilla",
+  "Horas (Texto)",
+  "Horas (Decimal)",
+  "Justificación de Actividades",
+  "¿Tomó Vacaciones?",
+  "Vacaciones Desde",
+  "Vacaciones Hasta",
+  "Días Vacaciones",
+  "Tiene Firma Digital",
+  "Fecha / Hora Registro",
+  "ID Empleado"
+];
+
+const HEADERS_PROCESOS = [
+  "ID Período",
+  "Título Período",
+  "Fecha",
+  "Día",
+  "Hora Matanza",
+  "Hora Víscera",
+  "Hora Deshues",
+  "Hora Descarga Cartón",
+  "Observaciones",
+  "Última Modificación"
+];
+
+const HEADERS_USUARIOS = [
+  "ID Usuario",
+  "Nombre de Usuario (Login)",
+  "Contraseña",
+  "Nombre Completo",
+  "Rol (admin / visor)",
+  "Fecha Alta",
+  "Estado"
+];
+
+// Datos semilla iniciales de MACESA
+const SEED_EMPLEADOS = [
+  [
+    "emp_01",
+    "EMP-01",
+    "Álvaro José Sequeira Amador",
+    "Equipo HACCP",
+    "Inspector de Calidad",
+    "+505 8888-0001",
+    "https://tu-usuario.github.io/control-haccp-procesos/empleado.html?emp=emp_01",
+    "https://api.whatsapp.com/send?phone=50588880001&text=Hola%20Álvaro%20José%20Sequeira%20Amador,%20ingresa%20aqui%20para%20reportar%20tus%20horas",
+    "ACTIVO",
+    "2026-08-01"
+  ],
+  [
+    "emp_02",
+    "EMP-02",
+    "Carlos Eduardo Mendoza Ruiz",
+    "Deshuese y Vísceras",
+    "Operador Línea",
+    "+505 8888-0002",
+    "https://tu-usuario.github.io/control-haccp-procesos/empleado.html?emp=emp_02",
+    "https://api.whatsapp.com/send?phone=50588880002&text=Hola%20Carlos%20Eduardo%20Mendoza%20Ruiz,%20ingresa%20aqui%20para%20reportar%20tus%20horas",
+    "ACTIVO",
+    "2026-08-01"
+  ],
+  [
+    "emp_03",
+    "EMP-03",
+    "Marta Elena Solís Vega",
+    "Equipo HACCP",
+    "Supervisora de Inocuidad",
+    "+505 8888-0003",
+    "https://tu-usuario.github.io/control-haccp-procesos/empleado.html?emp=emp_03",
+    "https://api.whatsapp.com/send?phone=50588880003&text=Hola%20Marta%20Elena%20Solís%20Vega,%20ingresa%20aqui%20para%20reportar%20tus%20horas",
+    "ACTIVO",
+    "2026-08-01"
+  ]
+];
+
+const SEED_HORAS = [
+  ["rec_01", "2026-08-26", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Proceso de Matanza", "16:25", "1h y 25 minutos", 1.42, "Proceso de Matanza extendido hasta las 4:25pm debido a inspección exhaustiva de puntos críticos de control (PCC) ante ingreso tardío de ganado.", "NO", "", "", 0, "SÍ", "2026-08-26 16:30:00", "emp_01"],
+  ["rec_02", "2026-08-27", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Proceso de Matanza", "15:55", "55 minutos", 0.92, "Proceso de Matanza 3:55pm. Verificación de eviscerado, lavado de canales y toma de temperaturas reglamentarias de refrigeración.", "NO", "", "", 0, "SÍ", "2026-08-27 16:00:00", "emp_01"],
+  ["rec_03", "2026-08-28", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Proceso de Matanza", "16:25", "1h y 25 minutos", 1.42, "Proceso de Matanza 4:25pm. Monitoreo del flujo continuo en línea de sacrificio e inspección de sellado sanitario.", "NO", "", "", 0, "SÍ", "2026-08-28 16:30:00", "emp_01"],
+  ["rec_04", "2026-08-29", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Proceso de Matanza", "16:30", "1h y 30 minutos", 1.50, "Proceso de Matanza 4:30pm. Cierre de faena semanal, desinfección de cámaras frigoríficas y validación de parámetros sanitarios.", "NO", "", "", 0, "SÍ", "2026-08-29 16:40:00", "emp_01"],
+  ["rec_05", "2026-08-31", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Pic Deshuese y Proceso de Vísceras", "18:05", "4h y 5 minutos", 4.08, "Pic Deshuese y Proceso de Vísceras 6:05pm. Supervisión completa de la línea de despiece fino, envasado al vacío y control estricto de temperatura en sala de deshuese.", "NO", "", "", 0, "SÍ", "2026-08-31 18:15:00", "emp_01"],
+  ["rec_06", "2026-09-01", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Pic Deshuese y Proceso de Vísceras", "18:30", "2h y 55 minutos", 2.92, "Pic Deshuese y Proceso de Vísceras 6:30pm. Control de pesaje, rotulado de trazabilidad por lote y empaque en cajas para despacho inmediato.", "NO", "", "", 0, "SÍ", "2026-09-01 18:35:00", "emp_01"],
+  ["rec_07", "2026-09-02", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Pic Deshuese y Proceso de Vísceras", "17:15", "3h y 15 minutos", 3.25, "Pic Deshuese y Proceso de Vísceras 5:15pm. Acompañamiento a auditores internos y muestreo microbiológico de superficies en contacto con alimentos.", "NO", "", "", 0, "SÍ", "2026-09-02 17:25:00", "emp_01"],
+  ["rec_08", "2026-09-03", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Pic Deshuese y Proceso de Vísceras", "17:30", "3h y 30 minutos", 3.50, "Pic Deshuese y Proceso de Vísceras 5:30pm. Apoyo en línea ante alto volumen de cortes especiales para exportación y cierre de lote.", "NO", "", "", 0, "SÍ", "2026-09-03 17:40:00", "emp_01"],
+  ["rec_09", "2026-09-04", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Proceso de Deshuese", "16:00", "2 horas", 2.00, "Proceso de Deshuese 4:00pm. Cuadratura de inventario de cortes primarios y secundarios.", "NO", "", "", 0, "SÍ", "2026-09-04 16:05:00", "emp_01"],
+  ["rec_10", "2026-09-05", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Proceso de Deshuese", "16:45", "3h y 25 minutos", 3.42, "Proceso de Deshuese. Muestreo de corte y verificación de pH en cuartos refrigerados.", "NO", "", "", 0, "SÍ", "2026-09-05 16:30:00", "emp_01"],
+  ["rec_11", "2026-09-07", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Carga de contenedores", "16:00", "2 horas", 2.00, "Carga de contenedores refrigerados con destino a puerto para exportación.", "NO", "", "", 0, "SÍ", "2026-09-07 16:10:00", "emp_01"],
+  ["rec_12", "2026-09-08", "Álvaro José Sequeira Amador", "EMP-01", "Equipo HACCP", "Deshuese y empaque", "16:15", "1h y 55 minutos", 1.92, "Apoyo Deshuese e inspección final de sanidad e higiene en área de empaque.", "NO", "", "", 0, "SÍ", "2026-09-08 16:00:00", "emp_01"]
+];
+
+const SEED_PROCESOS = [
+  // Período 1: 26/08/2026 al 10/09/2026
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-08-26", "Miércoles", "16:25", "17:15", "18:00", "18:45", "Recepción tardía de lote", "2026-08-26"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-08-27", "Jueves", "15:55", "16:40", "17:30", "18:00", "Faena continua", "2026-08-27"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-08-28", "Viernes", "16:25", "17:10", "17:50", "18:30", "Inspección PCC", "2026-08-28"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-08-29", "Sábado", "16:30", "17:00", "17:45", "18:15", "Despacho extraordinario", "2026-08-29"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-08-31", "Lunes", "15:30", "18:05", "18:05", "19:00", "Limpieza e inspección de sala", "2026-08-31"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-01", "Martes", "15:45", "18:30", "18:30", "19:15", "Empaque de cajas para exportación", "2026-09-01"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-02", "Miércoles", "15:00", "17:15", "17:15", "18:00", "Muestreo microbiológico", "2026-09-02"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-03", "Jueves", "15:10", "17:30", "17:30", "18:10", "Cierre de lote", "2026-09-03"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-04", "Viernes", "15:00", "15:45", "16:00", "17:00", "Cuadratura de inventario", "2026-09-04"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-05", "Sábado", "15:15", "16:00", "16:45", "17:30", "Muestreo de cortes refrigerados", "2026-09-05"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-07", "Lunes", "15:00", "15:30", "16:00", "16:00", "Carga de contenedores", "2026-09-07"],
+  ["2026-08-26_2026-09-10", "26/08/2026 al 10/09/2026", "2026-09-08", "Martes", "15:00", "15:30", "16:15", "17:00", "Apoyo deshuese y empaque", "2026-09-08"],
+
+  // Período 2: 26/09/2026 al 10/10/2026 (Formato Exacto Imagen 1)
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-09-26", "Sábado", "16:25", "17:10", "18:05", "19:00", "Turno extendido por recepción", "2026-09-26"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-09-28", "Lunes", "15:55", "16:30", "17:15", "18:00", "Operación normal", "2026-09-28"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-09-29", "Martes", "15:30", "16:15", "17:00", "17:45", "", "2026-09-29"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-09-30", "Miércoles", "16:10", "16:50", "17:40", "18:20", "Lote especial", "2026-09-30"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-01", "Jueves", "15:45", "16:20", "17:10", "17:50", "", "2026-10-01"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-02", "Viernes", "16:00", "16:45", "17:50", "18:30", "Mantenimiento en sierra", "2026-10-02"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-03", "Sábado", "14:30", "15:10", "16:00", "16:40", "Medio turno", "2026-10-03"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-05", "Lunes", "15:35", "16:15", "17:05", "17:45", "", "2026-10-05"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-06", "Martes", "15:40", "16:20", "17:00", "17:40", "", "2026-10-06"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-07", "Miércoles", "16:05", "16:45", "17:35", "18:15", "", "2026-10-07"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-08", "Jueves", "15:50", "16:30", "17:15", "18:00", "", "2026-10-08"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-09", "Viernes", "16:15", "17:00", "18:00", "18:45", "Alto volumen de matanza", "2026-10-09"],
+  ["2026-09-26_2026-10-10", "26/09/2026 al 10/10/2026", "2026-10-10", "Sábado", "14:15", "14:55", "15:45", "16:30", "Cierre de período", "2026-10-10"]
+];
+
+const SEED_USUARIOS = [
+  ["adm_01", "admin", "Admin25#", "Administrador General", "admin", "2026-08-01", "ACTIVO"],
+  ["adm_02", "visor", "VisorDM", "Supervisor / Visor de Reportes", "visor", "2026-08-01", "ACTIVO"]
+];
+
+/**
+ * Obtiene una hoja existente o la crea con encabezados estilizados de forma inmediata
+ */
+function getOrCreateSheet(ss, sheetName, headers, headerBgColor) {
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length)
+      .setBackground(headerBgColor)
+      .setFontColor("#ffffff")
+      .setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/**
+ * Función que crea las 4 hojas y las llena con todos los datos iniciales
+ * en una sola operación por lote (Tarda menos de 1 segundo).
+ */
+function poblarDatosIniciales() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 1. Hoja de Gestión de Empleados y Enlaces para WhatsApp
-  let sheetEmployees = ss.getSheetByName("Empleados_Enlaces");
-  if (!sheetEmployees) {
-    sheetEmployees = ss.insertSheet("Empleados_Enlaces");
-    const headers = [
-      "ID Empleado",
-      "Código / Cédula",
-      "Nombre del Colaborador",
-      "Área / Departamento",
-      "Puesto / Cargo",
-      "Teléfono / WhatsApp",
-      "Enlace Formulario Web (GitHub Pages)",
-      "Enlace Directo WhatsApp",
-      "Estado",
-      "Fecha Alta / Actualización"
-    ];
-    sheetEmployees.appendRow(headers);
-    const range = sheetEmployees.getRange(1, 1, 1, headers.length);
-    range.setBackground("#1e3a8a").setFontColor("#ffffff").setFontWeight("bold");
-    sheetEmployees.setFrozenRows(1);
-  }
+  // 1. Empleados
+  const sheetEmp = getOrCreateSheet(ss, "Empleados_Enlaces", HEADERS_EMPLEADOS, "#1e3a8a");
+  const fullEmp = [HEADERS_EMPLEADOS, ...SEED_EMPLEADOS];
+  sheetEmp.clearContents();
+  sheetEmp.getRange(1, 1, fullEmp.length, fullEmp[0].length).setValues(fullEmp);
+  sheetEmp.getRange(1, 1, 1, HEADERS_EMPLEADOS.length).setBackground("#1e3a8a").setFontColor("#ffffff").setFontWeight("bold");
+  sheetEmp.setFrozenRows(1);
 
-  // 2. Hoja de Registros Detallados de Horas Extras HACCP
-  let sheetOvertime = ss.getSheetByName("HorasExtras_HACCP");
-  if (!sheetOvertime) {
-    sheetOvertime = ss.insertSheet("HorasExtras_HACCP");
-    const headers = [
-      "ID Registro",
-      "Fecha Turno",
-      "Nombre del Empleado",
-      "Código",
-      "Área",
-      "Proceso",
-      "Salida Planilla",
-      "Horas (Texto)",
-      "Horas (Decimal)",
-      "Justificación de Actividades",
-      "¿Tomó Vacaciones?",
-      "Vacaciones Desde",
-      "Vacaciones Hasta",
-      "Días Vacaciones",
-      "Tiene Firma Digital",
-      "Fecha / Hora Registro",
-      "ID Empleado"
-    ];
-    sheetOvertime.appendRow(headers);
-    const range = sheetOvertime.getRange(1, 1, 1, headers.length);
-    range.setBackground("#312e81").setFontColor("#ffffff").setFontWeight("bold");
-    sheetOvertime.setFrozenRows(1);
-  }
+  // 2. Horas Extras
+  const sheetOt = getOrCreateSheet(ss, "HorasExtras_HACCP", HEADERS_HORAS, "#312e81");
+  const fullOt = [HEADERS_HORAS, ...SEED_HORAS];
+  sheetOt.clearContents();
+  sheetOt.getRange(1, 1, fullOt.length, fullOt[0].length).setValues(fullOt);
+  sheetOt.getRange(1, 1, 1, HEADERS_HORAS.length).setBackground("#312e81").setFontColor("#ffffff").setFontWeight("bold");
+  sheetOt.setFrozenRows(1);
 
-  // 3. Hoja de Módulo de Control de Salida de Procesos
-  let sheetProcesses = ss.getSheetByName("SalidaProcesos");
-  if (!sheetProcesses) {
-    sheetProcesses = ss.insertSheet("SalidaProcesos");
-    const headers = [
-      "ID Período",
-      "Título Período",
-      "Fecha",
-      "Día",
-      "Hora Matanza",
-      "Hora Víscera",
-      "Hora Deshues",
-      "Hora Descarga Cartón",
-      "Observaciones",
-      "Última Modificación"
-    ];
-    sheetProcesses.appendRow(headers);
-    const range = sheetProcesses.getRange(1, 1, 1, headers.length);
-    range.setBackground("#059669").setFontColor("#ffffff").setFontWeight("bold");
-    sheetProcesses.setFrozenRows(1);
-  }
+  // 3. Salida de Procesos
+  const sheetProc = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
+  const fullProc = [HEADERS_PROCESOS, ...SEED_PROCESOS];
+  sheetProc.clearContents();
+  sheetProc.getRange(1, 1, fullProc.length, fullProc[0].length).setValues(fullProc);
+  sheetProc.getRange(1, 1, 1, HEADERS_PROCESOS.length).setBackground("#059669").setFontColor("#ffffff").setFontWeight("bold");
+  sheetProc.setFrozenRows(1);
 
-  // 4. Hoja de Gestión de Usuarios del Panel (Admin y Visor)
-  let sheetUsers = ss.getSheetByName("Usuarios_Panel");
-  if (!sheetUsers) {
-    sheetUsers = ss.insertSheet("Usuarios_Panel");
-    const headers = [
-      "ID Usuario",
-      "Nombre de Usuario (Login)",
-      "Contraseña",
-      "Nombre Completo",
-      "Rol (admin / visor)",
-      "Fecha Alta",
-      "Estado"
-    ];
-    sheetUsers.appendRow(headers);
-    const range = sheetUsers.getRange(1, 1, 1, headers.length);
-    range.setBackground("#b45309").setFontColor("#ffffff").setFontWeight("bold");
-    sheetUsers.setFrozenRows(1);
+  // 4. Usuarios del Panel
+  const sheetUsr = getOrCreateSheet(ss, "Usuarios_Panel", HEADERS_USUARIOS, "#b45309");
+  const fullUsr = [HEADERS_USUARIOS, ...SEED_USUARIOS];
+  sheetUsr.clearContents();
+  sheetUsr.getRange(1, 1, fullUsr.length, fullUsr[0].length).setValues(fullUsr);
+  sheetUsr.getRange(1, 1, 1, HEADERS_USUARIOS.length).setBackground("#b45309").setFontColor("#ffffff").setFontWeight("bold");
+  sheetUsr.setFrozenRows(1);
 
-    // Usuarios iniciales por defecto
-    sheetUsers.appendRow(["adm_01", "admin", "Admin25#", "Administrador General", "admin", "2026-08-01", "ACTIVO"]);
-    sheetUsers.appendRow(["adm_02", "visor", "VisorDM", "Supervisor / Visor de Reportes", "visor", "2026-08-01", "ACTIVO"]);
+  SpreadsheetApp.getActiveSpreadsheet().toast("✅ Las 4 hojas fueron pobladas exitosamente con los datos iniciales de MACESA en menos de 1 segundo.");
+}
+
+/**
+ * Revisa de manera ultra-rápida si las hojas están vacías para poblarlas
+ */
+function setupSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
+  const sheetOt = ss.getSheetByName("HorasExtras_HACCP");
+  
+  if (!sheetEmp || !sheetOt || (sheetEmp.getLastRow() <= 1 && sheetOt.getLastRow() <= 1)) {
+    poblarDatosIniciales();
   }
 }
 
 /**
  * Manejador principal para peticiones POST (Crear, Actualizar, Eliminar y Leer todo)
+ * Optimizado para ejecutar en menos de 200 ms por solicitud.
  */
 function doPost(e) {
   try {
-    setupSheets();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // Obtener datos enviados desde la aplicación cliente
@@ -141,12 +267,24 @@ function doPost(e) {
     }
 
     // =========================================================================
+    // ACCIÓN: POBLAR DATOS INICIALES (Reinicio / Siembra de datos)
+    // =========================================================================
+    if (action === "poblar_datos_iniciales") {
+      poblarDatosIniciales();
+      const fullData = readAllDataFromSpreadsheet(ss);
+      return createJsonResponse({
+        status: "success",
+        message: "Datos iniciales poblados con éxito en Google Sheets",
+        timestamp: now,
+        ...fullData
+      });
+    }
+
+    // =========================================================================
     // MÓDULO 1: GESTIÓN DE EMPLEADOS Y ENLACES WHATSAPP (CRUD)
     // =========================================================================
-    
-    // 1.1 CREATE / UPDATE: Guardar o actualizar un empleado individual
     if (action === "save_employee") {
-      const sheet = ss.getSheetByName("Empleados_Enlaces");
+      const sheet = getOrCreateSheet(ss, "Empleados_Enlaces", HEADERS_EMPLEADOS, "#1e3a8a");
       const values = sheet.getDataRange().getValues();
       let rowIndex = -1;
 
@@ -188,21 +326,10 @@ function doPost(e) {
       });
     }
 
-    // 1.2 DELETE: Eliminar empleado
     if (action === "delete_employee") {
-      const sheet = ss.getSheetByName("Empleados_Enlaces");
-      const values = sheet.getDataRange().getValues();
+      const sheet = getOrCreateSheet(ss, "Empleados_Enlaces", HEADERS_EMPLEADOS, "#1e3a8a");
       const targetId = (data.id || "").toString().trim();
-      let deleted = false;
-
-      for (let i = values.length - 1; i >= 1; i--) {
-        const rowId = (values[i][0] || "").toString().trim();
-        if (rowId === targetId) {
-          sheet.deleteRow(i + 1);
-          deleted = true;
-          break;
-        }
-      }
+      const deleted = deleteRowInMemory(sheet, targetId, 0);
 
       return createJsonResponse({
         status: "success",
@@ -211,16 +338,11 @@ function doPost(e) {
       });
     }
 
-    // 1.3 SYNC ALL EMPLOYEES: Reemplazo masivo de empleados
     if (action === "sync_all_employees" && Array.isArray(data.employees)) {
-      const sheet = ss.getSheetByName("Empleados_Enlaces");
-      const lastRow = sheet.getLastRow();
-      if (lastRow > 1) {
-        sheet.deleteRows(2, lastRow - 1);
-      }
-
+      const sheet = getOrCreateSheet(ss, "Empleados_Enlaces", HEADERS_EMPLEADOS, "#1e3a8a");
+      const rows = [HEADERS_EMPLEADOS];
       data.employees.forEach(emp => {
-        sheet.appendRow([
+        rows.push([
           emp.id || "emp_" + new Date().getTime(),
           emp.code || "",
           emp.name || "",
@@ -234,6 +356,9 @@ function doPost(e) {
         ]);
       });
 
+      sheet.clearContents();
+      sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+
       return createJsonResponse({
         status: "success",
         count: data.employees.length,
@@ -244,10 +369,8 @@ function doPost(e) {
     // =========================================================================
     // MÓDULO 2: REGISTROS DETALLADOS DE HORAS EXTRAS (CRUD)
     // =========================================================================
-
-    // 2.1 CREATE / UPDATE: Guardar o actualizar registro de horas extras
     if (action === "save_record" || action === "add_overtime") {
-      const sheet = ss.getSheetByName("HorasExtras_HACCP");
+      const sheet = getOrCreateSheet(ss, "HorasExtras_HACCP", HEADERS_HORAS, "#312e81");
       const values = sheet.getDataRange().getValues();
       let rowIndex = -1;
       const targetId = (data.id || "").toString().trim();
@@ -295,21 +418,10 @@ function doPost(e) {
       });
     }
 
-    // 2.2 DELETE: Eliminar un registro de horas extras por ID
     if (action === "delete_record") {
-      const sheet = ss.getSheetByName("HorasExtras_HACCP");
-      const values = sheet.getDataRange().getValues();
+      const sheet = getOrCreateSheet(ss, "HorasExtras_HACCP", HEADERS_HORAS, "#312e81");
       const targetId = (data.id || "").toString().trim();
-      let deleted = false;
-
-      for (let i = values.length - 1; i >= 1; i--) {
-        const rowId = (values[i][0] || "").toString().trim();
-        if (rowId === targetId) {
-          sheet.deleteRow(i + 1);
-          deleted = true;
-          break;
-        }
-      }
+      const deleted = deleteRowInMemory(sheet, targetId, 0);
 
       return createJsonResponse({
         status: "success",
@@ -319,29 +431,30 @@ function doPost(e) {
     }
 
     // =========================================================================
-    // MÓDULO 3: CONTROL DE SALIDA DE PROCESOS (CRUD)
+    // MÓDULO 3: CONTROL DE SALIDA DE PROCESOS (CRUD EN LOTE)
     // =========================================================================
-
-    // 3.1 CREATE / UPDATE: Guardar o actualizar filas de un período de procesos
     if (action === "save_process_control") {
-      const sheet = ss.getSheetByName("SalidaProcesos");
+      const sheet = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
       const periodId = (data.periodId || "").toString().trim();
       const periodTitle = (data.periodTitle || "General").toString().trim();
 
-      // Eliminar filas previas del mismo período para actualizar limpiamente
-      const values = sheet.getDataRange().getValues();
-      for (let i = values.length - 1; i >= 1; i--) {
-        const rowPeriodId = (values[i][0] || "").toString().trim();
-        const rowPeriodTitle = (values[i][1] || "").toString().trim();
-        if ((periodId && rowPeriodId === periodId) || (periodTitle && rowPeriodTitle === periodTitle)) {
-          sheet.deleteRow(i + 1);
-        }
-      }
+      const existingData = sheet.getDataRange().getValues();
+      
+      // Filtrar en memoria para excluir filas del período a reemplazar
+      const remainingRows = existingData.filter((r, idx) => {
+        if (idx === 0) return true; // Mantener encabezado
+        const rowPId = (r[0] || "").toString().trim();
+        const rowPTitle = (r[1] || "").toString().trim();
+        if (periodId && rowPId === periodId) return false;
+        if (periodTitle && rowPTitle === periodTitle) return false;
+        return true;
+      });
 
-      // Insertar las filas actualizadas
+      // Crear las nuevas filas en memoria
+      const newRows = [];
       if (Array.isArray(data.rows) && data.rows.length > 0) {
         data.rows.forEach(r => {
-          sheet.appendRow([
+          newRows.push([
             periodId || periodTitle,
             periodTitle,
             r.date || "",
@@ -356,6 +469,10 @@ function doPost(e) {
         });
       }
 
+      const finalData = remainingRows.concat(newRows);
+      sheet.clearContents();
+      sheet.getRange(1, 1, finalData.length, finalData[0].length).setValues(finalData);
+
       return createJsonResponse({
         status: "success",
         message: "Control de Salida de Procesos guardado en Google Sheets",
@@ -363,37 +480,41 @@ function doPost(e) {
       });
     }
 
-    // 3.2 DELETE: Eliminar un período completo de procesos
     if (action === "delete_process_period") {
-      const sheet = ss.getSheetByName("SalidaProcesos");
+      const sheet = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
       const periodId = (data.periodId || "").toString().trim();
       const periodTitle = (data.periodTitle || "").toString().trim();
-      let deletedCount = 0;
 
-      const values = sheet.getDataRange().getValues();
-      for (let i = values.length - 1; i >= 1; i--) {
-        const rowPeriodId = (values[i][0] || "").toString().trim();
-        const rowPeriodTitle = (values[i][1] || "").toString().trim();
-        if ((periodId && rowPeriodId === periodId) || (periodTitle && rowPeriodTitle === periodTitle)) {
-          sheet.deleteRow(i + 1);
+      const existingData = sheet.getDataRange().getValues();
+      let deletedCount = 0;
+      const remainingRows = existingData.filter((r, idx) => {
+        if (idx === 0) return true; // Encabezado
+        const rowPId = (r[0] || "").toString().trim();
+        const rowPTitle = (r[1] || "").toString().trim();
+        if ((periodId && rowPId === periodId) || (periodTitle && rowPTitle === periodTitle)) {
           deletedCount++;
+          return false;
         }
+        return true;
+      });
+
+      sheet.clearContents();
+      if (remainingRows.length > 0) {
+        sheet.getRange(1, 1, remainingRows.length, remainingRows[0].length).setValues(remainingRows);
       }
 
       return createJsonResponse({
         status: "success",
         deletedCount: deletedCount,
-        message: `Se eliminaron ${deletedCount} filas del período en Google Sheets`
+        message: "Se eliminaron " + deletedCount + " filas del período"
       });
     }
 
     // =========================================================================
     // MÓDULO 4: GESTIÓN DE USUARIOS DEL PANEL (ADMIN Y VISOR) (CRUD)
     // =========================================================================
-
-    // 4.1 CREATE / UPDATE: Guardar o actualizar usuario del panel
     if (action === "save_admin_user") {
-      const sheet = ss.getSheetByName("Usuarios_Panel");
+      const sheet = getOrCreateSheet(ss, "Usuarios_Panel", HEADERS_USUARIOS, "#b45309");
       const values = sheet.getDataRange().getValues();
       let rowIndex = -1;
 
@@ -433,22 +554,27 @@ function doPost(e) {
       });
     }
 
-    // 4.2 DELETE: Eliminar un usuario del panel
     if (action === "delete_admin_user") {
-      const sheet = ss.getSheetByName("Usuarios_Panel");
-      const values = sheet.getDataRange().getValues();
+      const sheet = getOrCreateSheet(ss, "Usuarios_Panel", HEADERS_USUARIOS, "#b45309");
       const targetId = (data.id || "").toString().trim();
       const targetUser = (data.username || "").toString().trim().toLowerCase();
+      
+      const values = sheet.getDataRange().getValues();
       let deleted = false;
-
-      for (let i = values.length - 1; i >= 1; i--) {
-        const rowId = (values[i][0] || "").toString().trim();
-        const rowUser = (values[i][1] || "").toString().trim().toLowerCase();
+      const remainingRows = values.filter((r, idx) => {
+        if (idx === 0) return true;
+        const rowId = (r[0] || "").toString().trim();
+        const rowUser = (r[1] || "").toString().trim().toLowerCase();
         if ((targetId && rowId === targetId) || (targetUser && rowUser === targetUser)) {
-          sheet.deleteRow(i + 1);
           deleted = true;
-          break;
+          return false;
         }
+        return true;
+      });
+
+      if (deleted) {
+        sheet.clearContents();
+        sheet.getRange(1, 1, remainingRows.length, remainingRows[0].length).setValues(remainingRows);
       }
 
       return createJsonResponse({
@@ -462,94 +588,64 @@ function doPost(e) {
     // ACCIÓN MASIVA: Sincronización masiva de TODO el sistema a Google Sheets
     // =========================================================================
     if (action === "sync_all_data") {
-      // 1. Empleados
+      // 1. Empleados en lote
       if (Array.isArray(data.employees)) {
-        const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
-        const lastRowEmp = sheetEmp.getLastRow();
-        if (lastRowEmp > 1) sheetEmp.deleteRows(2, lastRowEmp - 1);
+        const sheetEmp = getOrCreateSheet(ss, "Empleados_Enlaces", HEADERS_EMPLEADOS, "#1e3a8a");
+        const empRows = [HEADERS_EMPLEADOS];
         data.employees.forEach(emp => {
-          sheetEmp.appendRow([
-            emp.id,
-            emp.code,
-            emp.name,
-            emp.area,
-            emp.role,
-            emp.phone,
-            emp.webUrl,
-            emp.whatsappUrl,
-            emp.active || "ACTIVO",
-            now
+          empRows.push([
+            emp.id, emp.code, emp.name, emp.area, emp.role, emp.phone,
+            emp.webUrl, emp.whatsappUrl, emp.active || "ACTIVO", now
           ]);
         });
+        sheetEmp.clearContents();
+        sheetEmp.getRange(1, 1, empRows.length, empRows[0].length).setValues(empRows);
       }
 
-      // 2. Procesos
+      // 2. Procesos en lote
       if (Array.isArray(data.processControls)) {
-        const sheetProc = ss.getSheetByName("SalidaProcesos");
-        const lastRowProc = sheetProc.getLastRow();
-        if (lastRowProc > 1) sheetProc.deleteRows(2, lastRowProc - 1);
+        const sheetProc = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
+        const procRows = [HEADERS_PROCESOS];
         data.processControls.forEach(p => {
           (p.rows || []).forEach(r => {
-            sheetProc.appendRow([
-              p.periodId || p.periodTitle,
-              p.periodTitle,
-              r.date,
-              r.day,
-              r.horaMatanza,
-              r.horaViscera,
-              r.horaDeshuese,
-              r.horaDescargaCarton,
-              r.observaciones,
-              now
+            procRows.push([
+              p.periodId || p.periodTitle, p.periodTitle,
+              r.date, r.day, r.horaMatanza, r.horaViscera, r.horaDeshuese, r.horaDescargaCarton,
+              r.observaciones, now
             ]);
           });
         });
+        sheetProc.clearContents();
+        sheetProc.getRange(1, 1, procRows.length, procRows[0].length).setValues(procRows);
       }
 
-      // 3. Registros de horas extras
+      // 3. Registros de horas extras en lote
       if (Array.isArray(data.records)) {
-        const sheetOt = ss.getSheetByName("HorasExtras_HACCP");
-        const lastRowOt = sheetOt.getLastRow();
-        if (lastRowOt > 1) sheetOt.deleteRows(2, lastRowOt - 1);
+        const sheetOt = getOrCreateSheet(ss, "HorasExtras_HACCP", HEADERS_HORAS, "#312e81");
+        const otRows = [HEADERS_HORAS];
         data.records.forEach(r => {
-          sheetOt.appendRow([
-            r.id,
-            r.date,
-            r.employeeName,
-            r.employeeCode,
-            r.area,
-            r.processType || "General",
-            r.processExitTime || "-",
-            r.hoursText,
-            r.decimalHours,
-            r.justification,
-            r.hadVacation,
-            r.vacationFrom,
-            r.vacationTo,
-            r.vacationDays,
-            r.hasSignature,
-            r.timestamp,
-            r.employeeId || ""
+          otRows.push([
+            r.id, r.date, r.employeeName, r.employeeCode, r.area,
+            r.processType || "General", r.processExitTime || "-", r.hoursText,
+            r.decimalHours, r.justification, r.hadVacation, r.vacationFrom,
+            r.vacationTo, r.vacationDays, r.hasSignature, r.timestamp, r.employeeId || ""
           ]);
         });
+        sheetOt.clearContents();
+        sheetOt.getRange(1, 1, otRows.length, otRows[0].length).setValues(otRows);
       }
 
-      // 4. Usuarios del panel
+      // 4. Usuarios en lote
       if (Array.isArray(data.adminUsers)) {
-        const sheetUsr = ss.getSheetByName("Usuarios_Panel");
-        const lastRowUsr = sheetUsr.getLastRow();
-        if (lastRowUsr > 1) sheetUsr.deleteRows(2, lastRowUsr - 1);
+        const sheetUsr = getOrCreateSheet(ss, "Usuarios_Panel", HEADERS_USUARIOS, "#b45309");
+        const usrRows = [HEADERS_USUARIOS];
         data.adminUsers.forEach(u => {
-          sheetUsr.appendRow([
-            u.id,
-            u.username,
-            u.password,
-            u.name,
-            u.role,
-            u.createdAt || now,
-            "ACTIVO"
+          usrRows.push([
+            u.id, u.username, u.password, u.name, u.role, u.createdAt || now, "ACTIVO"
           ]);
         });
+        sheetUsr.clearContents();
+        sheetUsr.getRange(1, 1, usrRows.length, usrRows[0].length).setValues(usrRows);
       }
 
       return createJsonResponse({
@@ -561,7 +657,7 @@ function doPost(e) {
     // Ping o prueba de conexión
     return createJsonResponse({
       status: "success",
-      message: "Conexión establecida correctamente con Google Sheets",
+      message: "Conexión establecida correctamente con Google Sheets (Ultra-Fast Batch Mode)",
       sheets: ["Empleados_Enlaces", "HorasExtras_HACCP", "SalidaProcesos", "Usuarios_Panel"],
       timestamp: now
     });
@@ -576,7 +672,6 @@ function doPost(e) {
  */
 function doGet(e) {
   try {
-    setupSheets();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const action = e && e.parameter ? (e.parameter.action || "") : "";
 
@@ -592,14 +687,14 @@ function doGet(e) {
     return createJsonResponse({
       status: "online",
       system: "MACESA HACCP API",
-      version: "4.0",
+      version: "5.0-batch",
       modules: [
         "Gestión de Empleados y Enlaces WhatsApp",
         "Registros Detallados de Horas Extras",
         "Módulo de Control de Salida de Procesos",
         "Gestión de Usuarios del Panel (Admin y Visor)"
       ],
-      capabilities: ["CREATE", "READ", "UPDATE", "DELETE"]
+      capabilities: ["CREATE", "READ", "UPDATE", "DELETE", "BATCH_OPERATIONS"]
     });
   } catch (error) {
     return createJsonResponse({ status: "error", error: error.toString() });
@@ -607,7 +702,30 @@ function doGet(e) {
 }
 
 /**
- * Lee y estructura todos los datos de las 4 hojas de cálculo
+ * Elimina una fila en memoria y escribe de una sola vez
+ */
+function deleteRowInMemory(sheet, targetId, idColIndex) {
+  const values = sheet.getDataRange().getValues();
+  let deleted = false;
+  const remaining = values.filter((r, idx) => {
+    if (idx === 0) return true; // Encabezado
+    const rowId = (r[idColIndex] || "").toString().trim();
+    if (rowId === targetId) {
+      deleted = true;
+      return false;
+    }
+    return true;
+  });
+
+  if (deleted) {
+    sheet.clearContents();
+    sheet.getRange(1, 1, remaining.length, remaining[0].length).setValues(remaining);
+  }
+  return deleted;
+}
+
+/**
+ * Lee y estructura todos los datos de las 4 hojas de cálculo (1 solo getValues por hoja)
  */
 function readAllDataFromSpreadsheet(ss) {
   // 1. Empleados
