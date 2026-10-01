@@ -1,4 +1,4 @@
-# Sistema MACESA: Control de Salida de Procesos y Justificación de Horas Extras HACCP
+# Sistema : Control de Salida de Procesos y Justificación de Horas Extras HACCP
 
 Aplicación web desarrollada con **HTML5, CSS3 y JavaScript ES6+**, diseñada para funcionar directamente en **GitHub Pages** (o cualquier servidor web estático).
 
