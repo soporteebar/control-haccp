@@ -38,6 +38,21 @@ function INICIALIZAR_SISTEMA_MACESA() {
 }
 
 /**
+ * Menú personalizado superior en Google Sheets
+ */
+function onOpen() {
+  try {
+    SpreadsheetApp.getUi()
+      .createMenu("🍖 HACCP MACESA")
+      .addItem("🌱 Inicializar Datos Semilla", "INICIALIZAR_SISTEMA_MACESA")
+      .addItem("🧹 Limpiar Registros Duplicados", "eliminarDuplicadosGoogleSheets")
+      .addToUi();
+  } catch (e) {
+    Logger.log("No se pudo agregar menú de interfaz: " + e.message);
+  }
+}
+
+/**
  * Obtiene la hoja de cálculo de forma segura, ya sea vinculada automáticamente
  * o mediante el SPREADSHEET_ID configurado.
  */
@@ -307,10 +322,189 @@ function setupSheets() {
 }
 
 /**
+ * 🧹 Limpia registros duplicados en todas las hojas en una sola operación por lote.
+ * Elimina duplicados por ID y por clave compuesta (fecha + empleado + proceso + horas)
+ * sin perder datos, firmas o formatos.
+ */
+function eliminarDuplicadosGoogleSheets() {
+  const ss = getSafeSpreadsheet_();
+  let totalRemoved = 0;
+  const summary = {};
+
+  // 1. Limpiar HorasExtras_HACCP
+  const sheetOt = ss.getSheetByName("HorasExtras_HACCP");
+  if (sheetOt && sheetOt.getLastRow() > 1) {
+    const data = sheetOt.getDataRange().getValues();
+    const headers = data[0];
+    const seenIds = {};
+    const seenKeys = {};
+    const cleanRows = [headers];
+    let removedOt = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const id = (row[0] || "").toString().trim();
+      const date = formatDateString(row[1]);
+      const empCode = (row[3] || "").toString().trim().toUpperCase();
+      const empId = (row[16] || "").toString().trim();
+      const proc = (row[5] || "").toString().trim().toLowerCase();
+      const hours = (parseFloat(row[8]) || 0).toFixed(2);
+
+      const compKey = `${date}|${empId || empCode}|${proc}|${hours}`;
+
+      if (id && seenIds[id]) {
+        removedOt++;
+        continue;
+      }
+      if (seenKeys[compKey]) {
+        removedOt++;
+        continue;
+      }
+
+      if (id) seenIds[id] = true;
+      seenKeys[compKey] = true;
+      cleanRows.push(row);
+    }
+
+    if (removedOt > 0) {
+      sheetOt.clearContents();
+      sheetOt.getRange(1, 1, cleanRows.length, cleanRows[0].length).setValues(cleanRows);
+      sheetOt.getRange(1, 1, 1, headers.length).setBackground("#312e81").setFontColor("#ffffff").setFontWeight("bold");
+      sheetOt.setFrozenRows(1);
+    }
+    summary.horasExtras = removedOt;
+    totalRemoved += removedOt;
+  }
+
+  // 2. Limpiar Empleados_Enlaces
+  const sheetEmp = ss.getSheetByName("Empleados_Enlaces");
+  if (sheetEmp && sheetEmp.getLastRow() > 1) {
+    const data = sheetEmp.getDataRange().getValues();
+    const headers = data[0];
+    const seenEmpIds = {};
+    const seenEmpCodes = {};
+    const cleanRows = [headers];
+    let removedEmp = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const id = (row[0] || "").toString().trim();
+      const code = (row[1] || "").toString().trim().toUpperCase();
+
+      if (id && seenEmpIds[id]) {
+        removedEmp++;
+        continue;
+      }
+      if (code && seenEmpCodes[code]) {
+        removedEmp++;
+        continue;
+      }
+
+      if (id) seenEmpIds[id] = true;
+      if (code) seenEmpCodes[code] = true;
+      cleanRows.push(row);
+    }
+
+    if (removedEmp > 0) {
+      sheetEmp.clearContents();
+      sheetEmp.getRange(1, 1, cleanRows.length, cleanRows[0].length).setValues(cleanRows);
+      sheetEmp.getRange(1, 1, 1, headers.length).setBackground("#1e3a8a").setFontColor("#ffffff").setFontWeight("bold");
+      sheetEmp.setFrozenRows(1);
+    }
+    summary.empleados = removedEmp;
+    totalRemoved += removedEmp;
+  }
+
+  // 3. Limpiar SalidaProcesos
+  const sheetProc = ss.getSheetByName("SalidaProcesos");
+  if (sheetProc && sheetProc.getLastRow() > 1) {
+    const data = sheetProc.getDataRange().getValues();
+    const headers = data[0];
+    const seenProcKeys = {};
+    const cleanRows = [headers];
+    let removedProc = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const periodId = (row[0] || row[1] || "").toString().trim();
+      const date = formatDateString(row[2]);
+      const key = `${periodId}|${date}`;
+
+      if (key && seenProcKeys[key]) {
+        removedProc++;
+        continue;
+      }
+      if (key) seenProcKeys[key] = true;
+      cleanRows.push(row);
+    }
+
+    if (removedProc > 0) {
+      sheetProc.clearContents();
+      sheetProc.getRange(1, 1, cleanRows.length, cleanRows[0].length).setValues(cleanRows);
+      sheetProc.getRange(1, 1, 1, headers.length).setBackground("#059669").setFontColor("#ffffff").setFontWeight("bold");
+      sheetProc.setFrozenRows(1);
+    }
+    summary.procesos = removedProc;
+    totalRemoved += removedProc;
+  }
+
+  // 4. Limpiar Usuarios_Panel
+  const sheetUsr = ss.getSheetByName("Usuarios_Panel");
+  if (sheetUsr && sheetUsr.getLastRow() > 1) {
+    const data = sheetUsr.getDataRange().getValues();
+    const headers = data[0];
+    const seenUsernames = {};
+    const cleanRows = [headers];
+    let removedUsr = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const username = (row[1] || "").toString().trim().toLowerCase();
+
+      if (username && seenUsernames[username]) {
+        removedUsr++;
+        continue;
+      }
+      if (username) seenUsernames[username] = true;
+      cleanRows.push(row);
+    }
+
+    if (removedUsr > 0) {
+      sheetUsr.clearContents();
+      sheetUsr.getRange(1, 1, cleanRows.length, cleanRows[0].length).setValues(cleanRows);
+      sheetUsr.getRange(1, 1, 1, headers.length).setBackground("#b45309").setFontColor("#ffffff").setFontWeight("bold");
+      sheetUsr.setFrozenRows(1);
+    }
+    summary.usuarios = removedUsr;
+    totalRemoved += removedUsr;
+  }
+
+  Logger.log(`🧹 Limpieza completada. Total duplicados eliminados: ${totalRemoved}`);
+  return {
+    status: "success",
+    totalRemoved: totalRemoved,
+    summary: summary,
+    message: totalRemoved > 0 
+      ? `Se eliminaron ${totalRemoved} registros duplicados de Google Sheets con éxito.`
+      : "No se encontraron registros duplicados. Google Sheets está limpio."
+  };
+}
+
+/**
  * Manejador principal para peticiones POST (Crear, Actualizar, Eliminar y Leer todo)
- * Optimizado para ejecutar en menos de 200 ms por solicitud.
+ * Con LockService para garantizar concurrencia segura y evitar filas duplicadas.
  */
 function doPost(e) {
+  // Bloqueo de concurrencia: previene que 2 solicitudes simultáneas creen filas duplicadas
+  const lock = LockService.getScriptLock();
+  const hasLock = lock.tryLock(20000); // Esperar hasta 20 segundos
+  if (!hasLock) {
+    return createJsonResponse({
+      status: "error",
+      error: "El servidor de Google Sheets está ocupado procesando otra solicitud. Por favor intenta de nuevo en unos segundos."
+    });
+  }
+
   try {
     const ss = getSafeSpreadsheet_();
 
@@ -344,6 +538,19 @@ function doPost(e) {
       return createJsonResponse({
         status: "success",
         message: "Datos iniciales poblados con éxito en Google Sheets",
+        timestamp: now,
+        ...fullData
+      });
+    }
+
+    // =========================================================================
+    // ACCIÓN: LIMPIAR DUPLICADOS EN TODAS LAS HOJAS
+    // =========================================================================
+    if (action === "clean_duplicates" || action === "eliminar_duplicados") {
+      const cleanResult = eliminarDuplicadosGoogleSheets();
+      const fullData = readAllDataFromSpreadsheet(ss);
+      return createJsonResponse({
+        ...cleanResult,
         timestamp: now,
         ...fullData
       });
@@ -444,6 +651,7 @@ function doPost(e) {
       let rowIndex = -1;
       const targetId = (data.id || "").toString().trim();
 
+      // 1. Buscar coincidencia por ID único
       if (targetId) {
         for (let i = 1; i < values.length; i++) {
           const rowId = (values[i][0] || "").toString().trim();
@@ -454,9 +662,39 @@ function doPost(e) {
         }
       }
 
+      // 2. Si no se encontró por ID, verificar si ya existe un registro para la misma Fecha, Colaborador y Proceso
+      // para actualizarlo en vez de crear una fila duplicada
+      if (rowIndex === -1) {
+        const targetDate = formatDateString(data.date || "");
+        const targetCode = (data.employeeCode || "").toString().trim().toUpperCase();
+        const targetEmpId = (data.employeeId || "").toString().trim();
+        const targetProc = (data.processType || "General").toString().trim().toLowerCase();
+
+        if (targetDate && (targetCode || targetEmpId)) {
+          for (let i = 1; i < values.length; i++) {
+            const rowDate = formatDateString(values[i][1]);
+            const rowCode = (values[i][3] || "").toString().trim().toUpperCase();
+            const rowProc = (values[i][5] || "").toString().trim().toLowerCase();
+            const rowEmpId = (values[i][16] || "").toString().trim();
+
+            const matchDate = rowDate === targetDate;
+            const matchEmp = (targetEmpId && rowEmpId === targetEmpId) || (targetCode && rowCode === targetCode);
+            const matchProc = rowProc === targetProc;
+
+            if (matchDate && matchEmp && matchProc) {
+              rowIndex = i + 1;
+              if (!targetId && values[i][0]) {
+                data.id = values[i][0].toString();
+              }
+              break;
+            }
+          }
+        }
+      }
+
       const rowData = [
-        targetId || "rec_" + new Date().getTime(),
-        data.date || "",
+        data.id || targetId || "rec_" + new Date().getTime(),
+        formatDateString(data.date) || "",
         data.employeeName || "",
         data.employeeCode || "",
         data.area || "HACCP",
@@ -482,7 +720,7 @@ function doPost(e) {
 
       return createJsonResponse({
         status: "success",
-        message: "Registro de horas extras guardado en Google Sheets",
+        message: rowIndex > 0 ? "Registro de horas extras actualizado en Google Sheets" : "Registro de horas extras guardado en Google Sheets",
         id: rowData[0]
       });
     }
@@ -762,6 +1000,10 @@ function doPost(e) {
 
   } catch (error) {
     return createJsonResponse({ status: "error", error: error.toString() });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (eLock) {}
   }
 }
 

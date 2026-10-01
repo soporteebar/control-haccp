@@ -881,6 +881,53 @@ const AdminApp = {
       });
     }
 
+    // Botón para Limpiar Registros Duplicados en Google Sheets
+    const btnCleanDuplicates = document.getElementById('btnCleanDuplicates');
+    if (btnCleanDuplicates) {
+      btnCleanDuplicates.addEventListener('click', async () => {
+        const conf = DB.getConfig();
+        if (!conf.googleSheetsUrl) {
+          alert('Por favor ingresa primero la URL del Web App de Google Apps Script arriba y pulsa "Guardar URL".');
+          return;
+        }
+
+        const proceed = confirm(
+          '¿Deseas analizar y eliminar registros duplicados en tus hojas de Google Sheets?\n\n' +
+          'Esta acción es segura: conservará un registro único de cada colaborador y turno, ' +
+          'eliminando únicamente repeticiones accidentales sin perder firmas ni observaciones.'
+        );
+        if (!proceed) return;
+
+        btnCleanDuplicates.disabled = true;
+        const origText = btnCleanDuplicates.textContent;
+        btnCleanDuplicates.textContent = '⏳ Depurando duplicados en Google Sheets...';
+
+        try {
+          const res = await DB.cleanDuplicatesInGoogleSheets();
+          if (res && res.status === 'success') {
+            const sum = res.summary || {};
+            alert(
+              `✅ Depuración de duplicados completada:\n\n` +
+              `• Duplicados en Horas Extras: ${sum.horasExtras || 0}\n` +
+              `• Duplicados en Empleados: ${sum.empleados || 0}\n` +
+              `• Duplicados en Salida de Procesos: ${sum.procesos || 0}\n` +
+              `• Duplicados en Usuarios del Panel: ${sum.usuarios || 0}\n\n` +
+              `Total de duplicados eliminados: ${res.totalRemoved || 0}\n` +
+              `Google Sheets ha quedado 100% optimizado y limpio.`
+            );
+            await this.pullDataFromGoogleSheets();
+          } else {
+            alert(`⚠️ Error al depurar duplicados: ${res.message || res.error || 'Respuesta inesperada'}`);
+          }
+        } catch (err) {
+          alert('⚠️ Error al comunicarse con Google Sheets: ' + err.message);
+        } finally {
+          btnCleanDuplicates.disabled = false;
+          btnCleanDuplicates.textContent = origText;
+        }
+      });
+    }
+
     // Botones para Cargar / Leer datos desde Google Sheets (Pull / Read)
     const handlePull = () => this.pullDataFromGoogleSheets();
     const btnPullHeader = document.getElementById('btnPullSheetsHeader');
@@ -1059,6 +1106,14 @@ const AdminApp = {
         if (!id && !password) {
           alert('La contraseña es obligatoria para un nuevo usuario.');
           return;
+        }
+
+        if (!id) {
+          const duplicateUser = (DB.getAdminUsers() || []).find(u => (u.username || '').trim().toLowerCase() === username.toLowerCase());
+          if (duplicateUser) {
+            alert(`⚠️ Ya existe un usuario con el nombre de acceso "${username}". Por favor elige otro nombre de usuario.`);
+            return;
+          }
         }
 
         const userData = {
@@ -1303,6 +1358,25 @@ const AdminApp = {
           if (existing && existing.signature) {
             recordData.signature = existing.signature;
           }
+        } else {
+          // Si es un nuevo registro, verificar si ya existe uno para este colaborador, fecha y proceso
+          const existing = (DB.getRecords() || []).find(r => 
+            r.employeeId === employeeId && 
+            r.date === date && 
+            (r.processType || 'General').trim().toLowerCase() === (processType || 'General').trim().toLowerCase()
+          );
+          if (existing) {
+            const empName = DB.getEmployeeById(employeeId)?.name || 'el colaborador';
+            const confirmUpdate = confirm(
+              `Ya existe un registro para ${empName} en la fecha ${date} (${processType || 'General'}).\n\n¿Deseas actualizar el registro existente en lugar de crear un duplicado?`
+            );
+            if (confirmUpdate) {
+              recordData.id = existing.id;
+              if (existing.signature) recordData.signature = existing.signature;
+            } else {
+              return;
+            }
+          }
         }
 
         const submitBtn = form.querySelector('button[type="submit"]');
@@ -1366,6 +1440,14 @@ const AdminApp = {
         if (!name || !code) {
           alert('Nombre y Código son requeridos.');
           return;
+        }
+
+        if (!editId) {
+          const duplicateCode = (DB.getEmployees() || []).find(e => (e.code || '').trim().toUpperCase() === code.toUpperCase());
+          if (duplicateCode) {
+            alert(`⚠️ Ya existe un colaborador con el código "${code}" (${duplicateCode.name}). Por favor usa un código único o edita el colaborador existente.`);
+            return;
+          }
         }
 
         const empData = {

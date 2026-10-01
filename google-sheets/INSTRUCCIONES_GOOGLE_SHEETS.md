@@ -102,3 +102,21 @@ Puedes configurar la URL de dos maneras sencillas:
 * **Read (Leer)**: Mantiene sincronizadas las credenciales en cualquier dispositivo que abra el sistema.
 * **Update (Actualizar)**: Botón **"Editar"** en la tabla para cambiar rol o contraseña.
 * **Delete (Eliminar)**: Botón **"Eliminar"** para revocar accesos al panel (con protección para no borrar el último administrador).
+
+---
+
+## 🛡️ Prevención y Depuración de Registros Duplicados
+
+Para asegurar que nunca existan datos repetidos al insertar desde múltiples dispositivos o por clics rápidos:
+
+1. **Bloqueo de Concurrencia en la Nube (`LockService`)**:
+   * Google Apps Script implementa un semáforo atómico (`LockService.getScriptLock()`) que serializa las solicitudes. Si dos usuarios envían información al mismo milisegundo, la segunda espera a que termine la primera y no duplica filas.
+
+2. **Detección Inteligente de Registros Existentes**:
+   * Si un colaborador o administrador registra un turno para un empleado en la misma fecha y proceso cárnico, el sistema detecta que ya existía y actualiza el registro existente en lugar de crear una fila duplicada.
+
+3. **Herramienta de Limpieza en 1 Clic**:
+   * **Desde la Web**: En la pestaña **4 (Configuración)**, haz clic en **"🧹 Limpiar Duplicados en Google Sheets"**.
+   * **Desde Google Sheets**: Abre tu hoja de cálculo y usa el menú superior **"🍖 HACCP MACESA" &rarr; "🧹 Limpiar Registros Duplicados"**.
+   * Ambas opciones escanean las 4 hojas en memoria, purgan filas redundantes sin perder firmas ni observaciones, y dejan tu Google Sheets completamente optimizado.
+

@@ -557,7 +557,7 @@ const DB = {
     return data.adminUsers;
   },
 
-  saveAdminUser(user) {
+  saveAdminUser(user, autoSync = true) {
     const data = this.load();
     if (!data.adminUsers) data.adminUsers = this.getAdminUsers();
 
@@ -575,13 +575,15 @@ const DB = {
     }
     this.save(data);
 
-    // Sincronizar automáticamente con Google Sheets
-    this.syncAdminUserToGoogleSheets(user);
+    // Sincronizar automáticamente con Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncAdminUserToGoogleSheets(user);
+    }
 
     return user;
   },
 
-  deleteAdminUser(id) {
+  deleteAdminUser(id, autoSync = true) {
     const data = this.load();
     if (!data.adminUsers) return false;
     // Evitar eliminar el único usuario admin
@@ -594,8 +596,10 @@ const DB = {
     data.adminUsers = data.adminUsers.filter(u => u.id !== id);
     this.save(data);
 
-    // Notificar eliminación a Google Sheets
-    this.syncAdminUserDeleteToGoogleSheets(id);
+    // Notificar eliminación a Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncAdminUserDeleteToGoogleSheets(id);
+    }
 
     return true;
   },
@@ -721,7 +725,7 @@ const DB = {
     return emp;
   },
 
-  saveEmployee(employee) {
+  saveEmployee(employee, autoSync = true) {
     const data = this.load();
     if (!employee.id) {
       employee.id = 'emp_' + Date.now();
@@ -737,19 +741,23 @@ const DB = {
     }
     this.save(data);
 
-    // Sincronizar automáticamente con Google Sheets
-    this.syncEmployeeToGoogleSheets(employee);
+    // Sincronizar automáticamente con Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncEmployeeToGoogleSheets(employee);
+    }
 
     return employee;
   },
 
-  deleteEmployee(id) {
+  deleteEmployee(id, autoSync = true) {
     const data = this.load();
     data.employees = data.employees.filter(e => e.id !== id);
     this.save(data);
 
-    // Notificar eliminación a Google Sheets
-    this.syncEmployeeDeleteToGoogleSheets(id);
+    // Notificar eliminación a Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncEmployeeDeleteToGoogleSheets(id);
+    }
 
     return true;
   },
@@ -774,7 +782,7 @@ const DB = {
     return records;
   },
 
-  saveRecord(record) {
+  saveRecord(record, autoSync = true) {
     const data = this.load();
     if (!record.id) {
       record.id = 'rec_' + Date.now();
@@ -790,19 +798,23 @@ const DB = {
     }
     this.save(data);
 
-    // Intentar sincronización con Google Sheets en segundo plano
-    this.syncRecordToGoogleSheets(record);
+    // Sincronizar automáticamente con Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncRecordToGoogleSheets(record);
+    }
 
     return record;
   },
 
-  deleteRecord(id) {
+  deleteRecord(id, autoSync = true) {
     const data = this.load();
     data.records = data.records.filter(r => r.id !== id);
     this.save(data);
 
-    // Sincronizar eliminación en Google Sheets
-    this.syncRecordDeleteToGoogleSheets(id);
+    // Sincronizar eliminación en Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncRecordDeleteToGoogleSheets(id);
+    }
 
     return true;
   },
@@ -843,7 +855,7 @@ const DB = {
     return list.find(p => p.periodId === periodId) || null;
   },
 
-  saveProcessControl(periodData) {
+  saveProcessControl(periodData, autoSync = true) {
     const data = this.load();
     if (!data.processControls) data.processControls = [];
     const idx = data.processControls.findIndex(p => p.periodId === periodData.periodId);
@@ -854,19 +866,23 @@ const DB = {
     }
     this.save(data);
 
-    // Sincronizar a Google Sheets
-    this.syncProcessesToGoogleSheets(periodData);
+    // Sincronizar a Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncProcessesToGoogleSheets(periodData);
+    }
     return periodData;
   },
 
-  deleteProcessControl(periodId) {
+  deleteProcessControl(periodId, autoSync = true) {
     const data = this.load();
     if (!data.processControls) return false;
     data.processControls = data.processControls.filter(p => p.periodId !== periodId);
     this.save(data);
 
-    // Sincronizar eliminación en Google Sheets
-    this.syncProcessDeleteToGoogleSheets(periodId);
+    // Sincronizar eliminación en Google Sheets solo si autoSync es true
+    if (autoSync) {
+      this.syncProcessDeleteToGoogleSheets(periodId);
+    }
 
     return true;
   },
@@ -1291,51 +1307,51 @@ const DB = {
     }
   },
 
-  // CRUD Asíncrono con confirmación en Google Sheets
+  // CRUD Asíncrono con confirmación en Google Sheets (autoSync = false para evitar peticiones dobles concurrentes)
   async saveEmployeeAsync(employee) {
-    const emp = this.saveEmployee(employee);
+    const emp = this.saveEmployee(employee, false);
     const syncRes = await this.syncEmployeeToGoogleSheets(emp);
     return { ...emp, cloudSynced: syncRes.success };
   },
 
   async deleteEmployeeAsync(id) {
-    const deleted = this.deleteEmployee(id);
+    const deleted = this.deleteEmployee(id, false);
     const syncRes = await this.syncEmployeeDeleteToGoogleSheets(id);
     return { success: deleted, cloudSynced: syncRes.success };
   },
 
   async saveRecordAsync(record) {
-    const rec = this.saveRecord(record);
+    const rec = this.saveRecord(record, false);
     const syncRes = await this.syncRecordToGoogleSheets(rec);
     return { ...rec, cloudSynced: syncRes.success };
   },
 
   async deleteRecordAsync(id) {
-    const deleted = this.deleteRecord(id);
+    const deleted = this.deleteRecord(id, false);
     const syncRes = await this.syncRecordDeleteToGoogleSheets(id);
     return { success: deleted, cloudSynced: syncRes.success };
   },
 
   async saveProcessControlAsync(periodData) {
-    const p = this.saveProcessControl(periodData);
+    const p = this.saveProcessControl(periodData, false);
     const syncRes = await this.syncProcessesToGoogleSheets(p);
     return { ...p, cloudSynced: syncRes.success };
   },
 
   async deleteProcessControlAsync(periodId) {
-    const deleted = this.deleteProcessControl(periodId);
+    const deleted = this.deleteProcessControl(periodId, false);
     const syncRes = await this.syncProcessDeleteToGoogleSheets(periodId);
     return { success: deleted, cloudSynced: syncRes.success };
   },
 
   async saveAdminUserAsync(user) {
-    const u = this.saveAdminUser(user);
+    const u = this.saveAdminUser(user, false);
     const syncRes = await this.syncAdminUserToGoogleSheets(u);
     return { ...u, cloudSynced: syncRes.success };
   },
 
   async deleteAdminUserAsync(id) {
-    const deleted = this.deleteAdminUser(id);
+    const deleted = this.deleteAdminUser(id, false);
     const syncRes = await this.syncAdminUserDeleteToGoogleSheets(id);
     return { success: deleted, cloudSynced: syncRes.success };
   },
@@ -1449,14 +1465,30 @@ const DB = {
 
       const localData = this.load();
 
-      // 1. Empleados: Reemplazo directo desde Google Sheets
+      // 1. Empleados: Deduplicar por ID y por Código
       let empCount = 0;
       if (Array.isArray(result.employees)) {
-        localData.employees = result.employees;
-        empCount = result.employees.length;
+        const seenEmpIds = new Set();
+        const seenEmpCodes = new Set();
+        const cleanEmployees = [];
+
+        for (const emp of result.employees) {
+          const empId = (emp.id || '').toString().trim();
+          const empCode = (emp.code || '').toString().trim().toUpperCase();
+
+          if (empId && seenEmpIds.has(empId)) continue;
+          if (empCode && seenEmpCodes.has(empCode)) continue;
+
+          if (empId) seenEmpIds.add(empId);
+          if (empCode) seenEmpCodes.add(empCode);
+          cleanEmployees.push(emp);
+        }
+
+        localData.employees = cleanEmployees;
+        empCount = cleanEmployees.length;
       }
 
-      // 2. Horas Extras: Reemplazo directo preservando imágenes de firmas dibujadas localmente
+      // 2. Horas Extras: Deduplicar por ID y por huella compuesta (fecha + empleado + proceso + horas)
       let recCount = 0;
       if (Array.isArray(result.records)) {
         const currentRecords = localData.records || [];
@@ -1467,42 +1499,82 @@ const DB = {
           }
         });
 
-        localData.records = result.records.map(sheetRec => {
+        const seenRecIds = new Set();
+        const seenFingerprints = new Set();
+        const cleanRecords = [];
+
+        for (const sheetRec of result.records) {
           if (!sheetRec.employeeId && sheetRec.employeeCode) {
             const foundEmp = (localData.employees || []).find(e => e.code === sheetRec.employeeCode || e.name === sheetRec.employeeName);
             if (foundEmp) sheetRec.employeeId = foundEmp.id;
           }
-          return {
+
+          const recId = (sheetRec.id || '').toString().trim();
+          const empKey = (sheetRec.employeeId || sheetRec.employeeCode || sheetRec.employeeName || '').toString().trim();
+          const procKey = (sheetRec.processType || 'general').toString().trim().toLowerCase();
+          const hrsKey = (parseFloat(sheetRec.decimalHours) || 0).toFixed(2);
+          const fingerprint = `${sheetRec.date}_${empKey}_${procKey}_${hrsKey}`;
+
+          // Evitar duplicados por ID o por coincidencia idéntica de turno
+          if (recId && seenRecIds.has(recId)) continue;
+          if (fingerprint && seenFingerprints.has(fingerprint)) continue;
+
+          if (recId) seenRecIds.add(recId);
+          if (fingerprint) seenFingerprints.add(fingerprint);
+
+          cleanRecords.push({
             ...sheetRec,
             signature: sigMap[sheetRec.id] || (sheetRec.signature && sheetRec.signature.startsWith('data:image') ? sheetRec.signature : null)
-          };
-        });
+          });
+        }
 
-        localData.records.sort((a, b) => (a.date > b.date ? 1 : -1));
-        recCount = localData.records.length;
+        cleanRecords.sort((a, b) => (a.date > b.date ? 1 : -1));
+        localData.records = cleanRecords;
+        recCount = cleanRecords.length;
       }
 
-      // 3. Salida de Procesos: Reemplazo directo desde Google Sheets
+      // 3. Salida de Procesos: Deduplicar por periodId
       let procCount = 0;
       if (Array.isArray(result.processControls)) {
-        localData.processControls = result.processControls.map(p => ({
-          ...p,
-          rows: (p.rows || []).map(r => ({
-            ...r,
-            horaMatanza: TimeUtils.normalizeTimeString(r.horaMatanza),
-            horaViscera: TimeUtils.normalizeTimeString(r.horaViscera),
-            horaDeshuese: TimeUtils.normalizeTimeString(r.horaDeshuese),
-            horaDescargaCarton: TimeUtils.normalizeTimeString(r.horaDescargaCarton)
-          }))
-        }));
-        procCount = localData.processControls.length;
+        const seenPeriodIds = new Set();
+        const cleanProcess = [];
+
+        for (const p of result.processControls) {
+          const pid = (p.periodId || p.periodTitle || '').toString().trim();
+          if (pid && seenPeriodIds.has(pid)) continue;
+          if (pid) seenPeriodIds.add(pid);
+
+          cleanProcess.push({
+            ...p,
+            rows: (p.rows || []).map(r => ({
+              ...r,
+              horaMatanza: TimeUtils.normalizeTimeString(r.horaMatanza),
+              horaViscera: TimeUtils.normalizeTimeString(r.horaViscera),
+              horaDeshuese: TimeUtils.normalizeTimeString(r.horaDeshuese),
+              horaDescargaCarton: TimeUtils.normalizeTimeString(r.horaDescargaCarton)
+            }))
+          });
+        }
+
+        localData.processControls = cleanProcess;
+        procCount = cleanProcess.length;
       }
 
-      // 4. Usuarios del Panel: Reemplazo directo desde Google Sheets
+      // 4. Usuarios del Panel: Deduplicar por username o ID
       let usrCount = 0;
       if (Array.isArray(result.adminUsers) && result.adminUsers.length > 0) {
-        localData.adminUsers = result.adminUsers;
-        usrCount = result.adminUsers.length;
+        const seenUsernames = new Set();
+        const cleanUsers = [];
+
+        for (const u of result.adminUsers) {
+          const uname = (u.username || '').toString().trim().toLowerCase();
+          if (uname && seenUsernames.has(uname)) continue;
+          if (uname) seenUsernames.add(uname);
+          cleanUsers.push(u);
+        }
+
+        localData.adminUsers = cleanUsers;
+        usrCount = cleanUsers.length;
       }
 
       // Guardar base de datos actualizada en LocalStorage
@@ -1524,6 +1596,31 @@ const DB = {
 
     } catch (err) {
       console.error('Error al cargar datos desde Google Sheets:', err);
+      return { success: false, error: err.toString() };
+    }
+  },
+
+  // Limpiar registros duplicados directamente en las hojas de Google Sheets
+  async cleanDuplicatesInGoogleSheets() {
+    const config = this.getConfig();
+    if (!config.googleSheetsUrl) {
+      return { success: false, message: 'URL de Google Sheets no configurada.' };
+    }
+
+    try {
+      const res = await fetch(config.googleSheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'clean_duplicates',
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      const result = await res.json();
+      return result;
+    } catch (err) {
+      console.error('Error al limpiar duplicados en Google Sheets:', err);
       return { success: false, error: err.toString() };
     }
   },

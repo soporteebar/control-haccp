@@ -429,6 +429,8 @@ const EmpleadoApp = {
   },
 
   async saveRecord() {
+    if (this.isSubmitting) return;
+
     if (!this.currentEmployee) {
       alert('Por favor selecciona un empleado primero.');
       return;
@@ -471,6 +473,26 @@ const EmpleadoApp = {
     const signature = this.signaturePad && !this.signaturePad.isEmpty() ? this.signaturePad.toDataURL() : null;
     const processType = document.getElementById('processTypeInput')?.value || '';
 
+    // Detección inteligente de duplicados: Si ya existe un registro para esta fecha y proceso, actualizarlo
+    const existingRecords = DB.getRecords({ employeeId: this.currentEmployee.id });
+    const existing = existingRecords.find(r => 
+      r.date === dateVal && 
+      (r.processType || 'general').trim().toLowerCase() === (processType || 'general').trim().toLowerCase()
+    );
+
+    let recordId = null;
+    let existingSignature = null;
+    if (existing) {
+      const confirmUpdate = confirm(
+        `Ya tienes un registro guardado para el día ${dateVal} en "${processType || 'General'}".\n\n¿Deseas actualizar el registro existente con estos nuevos datos en lugar de duplicarlo?`
+      );
+      if (!confirmUpdate) {
+        return;
+      }
+      recordId = existing.id;
+      existingSignature = existing.signature;
+    }
+
     const record = {
       employeeId: this.currentEmployee.id,
       date: dateVal,
@@ -484,8 +506,12 @@ const EmpleadoApp = {
       vacationFrom: vacFrom,
       vacationTo: vacTo,
       vacationDays: vacDays,
-      signature
+      signature: signature || existingSignature || null
     };
+
+    if (recordId) {
+      record.id = recordId;
+    }
 
     const submitBtn = document.querySelector('#overtimeForm button[type="submit"]');
     const oldBtnText = submitBtn ? submitBtn.textContent : '';
@@ -493,6 +519,7 @@ const EmpleadoApp = {
       submitBtn.disabled = true;
       submitBtn.textContent = '⏳ Guardando en Google Sheets...';
     }
+    this.isSubmitting = true;
 
     try {
       await DB.saveRecordAsync(record);
@@ -524,6 +551,7 @@ const EmpleadoApp = {
     } catch (err) {
       alert('Error guardando en Google Sheets: ' + err.message);
     } finally {
+      this.isSubmitting = false;
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.textContent = oldBtnText;
