@@ -104,15 +104,42 @@
         </button>
       </div>
 
+      <!-- Selector de Período Oficial de Procesos -->
+      <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-950 text-white p-3.5 sm:p-4 border-b border-blue-800 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="p-2 bg-blue-800/80 rounded-lg text-amber-300">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+              </svg>
+            </span>
+            <div>
+              <label for="empPeriodSelect" class="text-xs font-bold uppercase tracking-wider text-blue-200 block">
+                Período de Procesos
+              </label>
+              <span class="text-[11px] text-blue-300">Selecciona el período para consultar tus horas y boleta</span>
+            </div>
+          </div>
+          <div class="w-full sm:w-auto min-w-[310px]">
+            <select id="empPeriodSelect" class="w-full bg-blue-800/90 hover:bg-blue-800 text-white font-semibold text-xs sm:text-sm py-2 px-3 rounded-lg border border-blue-600 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer transition-all shadow-inner">
+              <!-- Se puebla dinámicamente -->
+            </select>
+          </div>
+        </div>
+      </div>
+
       <!-- Resumen Superior de Horas Acumuladas -->
       <div class="bg-blue-50 border-b border-blue-100 p-4 flex items-center justify-between">
         <div>
-          <span class="text-xs font-bold uppercase tracking-wider text-blue-800 block">Total Acumulado del Período</span>
-          <span id="totalAccumulatedHours" class="text-3xl font-black text-blue-900">26.93 hrs</span>
+          <span class="text-xs font-bold uppercase tracking-wider text-blue-800 block">
+            Total Acumulado del Período
+            <span id="currentPeriodLabelBadge" class="inline-block ml-1 px-2 py-0.5 rounded text-[11px] bg-blue-100 text-blue-700 font-semibold normal-case">Cargando...</span>
+          </span>
+          <span id="totalAccumulatedHours" class="text-3xl font-black text-blue-900">0.00 hrs</span>
         </div>
         <div class="text-right">
           <span class="text-xs text-slate-500 block">Días Reportados</span>
-          <span id="totalRecordsCount" class="text-lg font-bold text-slate-700">12 días</span>
+          <span id="totalRecordsCount" class="text-lg font-bold text-slate-700">0 días</span>
         </div>
       </div>
 
@@ -326,9 +353,8 @@
          HOJA OFICIAL IMPRIMIBLE (Réplica exacta de la Imagen 2 para 1 hoja física)
          Visible únicamente al imprimir (window.print() o Ctrl+P)
          ========================================================================= -->
-     <!--   
     <div id="officialPrintSheet" class="official-print-sheet">
-      <!-- Encabezado Oficial tipo Imagen 2 
+      <!-- Encabezado Oficial tipo Imagen 2 -->
       <div class="print-official-header">
         <div class="print-header-top">
           <img src="assets/logo-macesa.svg" alt="MACESA" class="print-logo">
@@ -342,14 +368,14 @@
 
         <div class="print-employee-info">
           <div class="print-info-row">
-            <span>Nombre: <strong id="printEmpName">Álvaro José Sequeira Amador</strong></span>
+            <span>Nombre: <strong id="printEmpName">Colaborador</strong></span>
             <span>Código: <strong id="printEmpCode">EMP-01</strong></span>
             <span>Área: <strong id="printEmpArea">Equipo HACCP</strong></span>
           </div>
         </div>
       </div>
 
-      <!-- Tabla Principal de Horas Extras 
+      <!-- Tabla Principal de Horas Extras -->
       <table class="print-table print-overtime-table">
         <thead>
           <tr>
@@ -359,8 +385,8 @@
           </tr>
         </thead>
         <tbody id="printOvertimeBody">
-          --> 
-          <!-- Filas dinámicas 
+          <!-- Filas dinámicas -->
+        </tbody>
         <tfoot>
           <tr class="print-total-row">
             <td><strong>TOTAL DE HORAS:</strong></td>
@@ -368,9 +394,9 @@
             <td id="printTotalWordsCell"></td>
           </tr>
         </tfoot>
-      </table>--> 
+      </table>
 
-      <!-- Tabla de Vacaciones (Exacta como Imagen 2) 
+      <!-- Tabla de Vacaciones (Exacta como Imagen 2) -->
       <div class="print-vacations-section">
         <table class="print-table print-vacation-table">
           <thead>
@@ -398,21 +424,21 @@
             <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
           </tbody>
         </table>
-      </div>--> 
+      </div>
 
-      <!-- Sección de Firma Física al pie de página 
+      <!-- Sección de Firma Física al pie de página -->
       <div class="print-signatures-container">
         <div class="print-signature-col">
           <div class="print-sign-line"></div>
           <p class="print-sign-label">Firma del Empleado</p>
-          <p class="print-sign-sub" id="printSignEmpName">Álvaro José Sequeira Amador</p>
+          <p class="print-sign-sub" id="printSignEmpName">Colaborador</p>
         </div>
         <div class="print-signature-col">
           <div class="print-sign-line"></div>
           <p class="print-sign-label">Firma Supervisor / Responsable HACCP</p>
           <p class="print-sign-sub">Revisado y Aprobado</p>
         </div>
-      </div>--> 
+      </div>
     </div>
 
   </main>

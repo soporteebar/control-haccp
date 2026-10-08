@@ -99,6 +99,7 @@ const AdminApp = {
   handleRemoteDataUpdate(summary) {
     console.log('🔄 Actualizando interfaz con datos frescos de Google Sheets:', summary);
     this.populateEmployeeFilters();
+    this.populatePeriodFilters();
 
     if (this.activeTab === 'tab-dashboard') {
       this.renderDashboard();
@@ -279,22 +280,60 @@ const AdminApp = {
 
   initFilters() {
     const empSelect = document.getElementById('filterEmployee');
+    const periodSelect = document.getElementById('filterPeriod');
     const dateFrom = document.getElementById('filterDateFrom');
     const dateTo = document.getElementById('filterDateTo');
 
-    // Poblar selector de empleados en filtro
+    // Poblar selectores de empleados y períodos
     this.populateEmployeeFilters();
+    this.populatePeriodFilters();
 
     const applyFilter = () => this.renderDashboard();
 
     if (empSelect) empSelect.addEventListener('change', applyFilter);
-    if (dateFrom) dateFrom.addEventListener('change', applyFilter);
-    if (dateTo) dateTo.addEventListener('change', applyFilter);
+
+    // Cuando se selecciona un período oficial en el dropdown opcional
+    if (periodSelect) {
+      periodSelect.addEventListener('change', () => {
+        const pid = periodSelect.value;
+        if (pid) {
+          const p = DB.getProcessControlByPeriod(pid);
+          if (p) {
+            const range = TimeUtils.getPeriodRange(p);
+            if (dateFrom && range.fromDate) dateFrom.value = range.fromDate;
+            if (dateTo && range.toDate) dateTo.value = range.toDate;
+          }
+        } else {
+          // Si selecciona "Todos los Períodos", limpiar el filtro de fechas
+          if (dateFrom) dateFrom.value = '';
+          if (dateTo) dateTo.value = '';
+        }
+        applyFilter();
+      });
+    }
+
+    // Si el usuario modifica manualmente las fechas, desmarcar el período si no coincide
+    const onManualDateChange = () => {
+      if (periodSelect && periodSelect.value) {
+        const p = DB.getProcessControlByPeriod(periodSelect.value);
+        if (p) {
+          const range = TimeUtils.getPeriodRange(p);
+          if (dateFrom.value !== range.fromDate || dateTo.value !== range.toDate) {
+            periodSelect.value = '';
+          }
+        }
+      }
+      applyFilter();
+    };
+
+    if (dateFrom) dateFrom.addEventListener('change', onManualDateChange);
+    if (dateTo) dateTo.addEventListener('change', onManualDateChange);
 
     const btnClearFilter = document.getElementById('btnClearFilter');
     if (btnClearFilter) {
       btnClearFilter.addEventListener('click', () => {
         if (empSelect) empSelect.value = '';
+        if (periodSelect) periodSelect.value = '';
         if (dateFrom) dateFrom.value = '';
         if (dateTo) dateTo.value = '';
         this.renderDashboard();
@@ -309,7 +348,14 @@ const AdminApp = {
         const to = dateTo ? dateTo.value : '';
         const emps = DB.getEmployees();
         const records = DB.getRecords({ fromDate: from, toDate: to });
-        ExcelExport.exportConsolidated(emps, records, from, to);
+        let periodLabel = 'Consolidado General';
+        if (periodSelect && periodSelect.value) {
+          const p = DB.getProcessControlByPeriod(periodSelect.value);
+          if (p) periodLabel = p.periodTitle;
+        } else if (from && to) {
+          periodLabel = `${TimeUtils.formatDateDMY(from)} al ${TimeUtils.formatDateDMY(to)}`;
+        }
+        ExcelExport.exportConsolidated(emps, records, from, to, periodLabel);
       });
     }
 
@@ -319,17 +365,23 @@ const AdminApp = {
         const empId = empSelect ? empSelect.value : '';
         const from = dateFrom ? dateFrom.value : '';
         const to = dateTo ? dateTo.value : '';
+        let periodLabel = 'Período Completo';
+        if (periodSelect && periodSelect.value) {
+          const p = DB.getProcessControlByPeriod(periodSelect.value);
+          if (p) periodLabel = p.periodTitle;
+        } else if (from && to) {
+          periodLabel = `${TimeUtils.formatDateDMY(from)} al ${TimeUtils.formatDateDMY(to)}`;
+        }
 
         if (empId) {
           const emp = DB.getEmployeeById(empId);
           const records = DB.getRecords({ employeeId: empId, fromDate: from, toDate: to });
           const vacations = DB.getVacations(empId);
-          const periodLabel = (from && to) ? `${TimeUtils.formatDateDMY(from)} al ${TimeUtils.formatDateDMY(to)}` : 'Período Completo';
           ExcelExport.exportEmployeeOvertime(emp, records, vacations, periodLabel);
         } else {
           const emps = DB.getEmployees();
           const records = DB.getRecords({ fromDate: from, toDate: to });
-          ExcelExport.exportConsolidated(emps, records, from, to);
+          ExcelExport.exportConsolidated(emps, records, from, to, periodLabel);
         }
       });
     }
@@ -339,23 +391,74 @@ const AdminApp = {
     const empSelect = document.getElementById('filterEmployee');
     if (!empSelect) return;
 
+    const currentVal = empSelect.value;
     const employees = DB.getEmployees();
     empSelect.innerHTML = '<option value="">Todos los Empleados</option>';
     employees.forEach(emp => {
       const opt = document.createElement('option');
       opt.value = emp.id;
       opt.textContent = `${emp.name} (${emp.area})`;
+      if (emp.id === currentVal) opt.selected = true;
       empSelect.appendChild(opt);
     });
+  },
+
+  populatePeriodFilters() {
+    const periodSelect = document.getElementById('filterPeriod');
+    if (!periodSelect) return;
+
+    const currentVal = periodSelect.value;
+    const periods = DB.getProcessControls();
+    periodSelect.innerHTML = '<option value="">Todos los Períodos (Opcional)</option>';
+
+    periods.forEach((p, idx) => {
+      const opt = document.createElement('option');
+      opt.value = p.periodId;
+      let labelTag = '';
+      if (idx === 0) labelTag = ' (Actual)';
+      else if (idx === 1) labelTag = ' (Anterior)';
+      opt.textContent = `Período: ${p.periodTitle}${labelTag}`;
+      if (p.periodId === currentVal) opt.selected = true;
+      periodSelect.appendChild(opt);
+    });
+
+    if (currentVal && periods.some(p => p.periodId === currentVal)) {
+      periodSelect.value = currentVal;
+    }
   },
 
   renderDashboard() {
     const empId = document.getElementById('filterEmployee')?.value || '';
     const fromDate = document.getElementById('filterDateFrom')?.value || '';
     const toDate = document.getElementById('filterDateTo')?.value || '';
+    const periodSelect = document.getElementById('filterPeriod');
+    const badge = document.getElementById('adminPeriodBadge');
+
+    // Actualizar badge visual del período en la cabecera de la tabla
+    if (badge) {
+      if (periodSelect && periodSelect.value) {
+        const p = DB.getProcessControlByPeriod(periodSelect.value);
+        badge.textContent = p ? p.periodTitle : 'Período Filtrado';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold hidden sm:inline-block';
+      } else if (fromDate || toDate) {
+        badge.textContent = `${fromDate ? TimeUtils.formatDateDMY(fromDate) : 'Inicio'} al ${toDate ? TimeUtils.formatDateDMY(toDate) : 'Hoy'}`;
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold hidden sm:inline-block';
+      } else {
+        badge.textContent = 'Todos los Períodos';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold hidden sm:inline-block';
+      }
+    }
 
     const records = DB.getRecords({ employeeId: empId, fromDate, toDate });
     const employees = DB.getEmployees();
+
+    // Ordenar los registros estrictamente del MÁS RECIENTE al MÁS ANTIGUO
+    records.sort((a, b) => {
+      if (b.date !== a.date) {
+        return b.date.localeCompare(a.date);
+      }
+      return (b.timestamp || b.id || '').localeCompare(a.timestamp || a.id || '');
+    });
 
     // Calcular KPIs
     let totalDecimalHours = 0;

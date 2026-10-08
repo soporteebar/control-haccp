@@ -10,10 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
 const EmpleadoApp = {
   currentEmployee: null,
   signaturePad: null,
+  selectedPeriodId: null,
 
   init() {
     this.initSignature();
     this.bindEvents();
+    this.initPeriodSelector();
     this.initLiveSync();
     this.checkEmployeeAuth();
     this.setDefaultDate();
@@ -32,6 +34,7 @@ const EmpleadoApp = {
 
       DB.SyncEngine.onDataUpdated((summary) => {
         console.log('🔄 EmpleadoApp detectó cambios en Google Sheets');
+        this.populatePeriodSelector();
         if (!this.currentEmployee) {
           this.checkEmployeeAuth();
         } else {
@@ -49,6 +52,7 @@ const EmpleadoApp = {
         btnRefresh.disabled = true;
         try {
           await DB.loadAllFromGoogleSheets();
+          this.populatePeriodSelector();
           if (this.currentEmployee) {
             this.renderHistory();
           } else {
@@ -65,6 +69,7 @@ const EmpleadoApp = {
     const conf = DB.getConfig();
     if (conf.googleSheetsUrl) {
       DB.loadAllFromGoogleSheets({ silent: true }).then(() => {
+        this.populatePeriodSelector();
         if (!this.currentEmployee) {
           this.checkEmployeeAuth();
         } else {
@@ -166,6 +171,7 @@ const EmpleadoApp = {
     if (areaEl) areaEl.textContent = employee.area || 'Equipo HACCP';
     if (codeEl) codeEl.textContent = employee.code || 'N/A';
 
+    this.populatePeriodSelector();
     this.renderHistory();
 
     // Redimensionar canvas de firma tras mostrarse el contenedor
@@ -366,9 +372,15 @@ const EmpleadoApp = {
     if (btnExcel) {
       btnExcel.addEventListener('click', () => {
         if (!this.currentEmployee) return;
-        const records = DB.getRecords({ employeeId: this.currentEmployee.id });
+        const filter = this.getCurrentPeriodFilter();
+        const queryParams = { employeeId: this.currentEmployee.id };
+        if (!filter.isAll) {
+          if (filter.fromDate) queryParams.fromDate = filter.fromDate;
+          if (filter.toDate) queryParams.toDate = filter.toDate;
+        }
+        const records = DB.getRecords(queryParams);
         const vacations = DB.getVacations(this.currentEmployee.id);
-        ExcelExport.exportEmployeeOvertime(this.currentEmployee, records, vacations);
+        ExcelExport.exportEmployeeOvertime(this.currentEmployee, records, vacations, filter.periodTitle);
       });
     }
 
@@ -382,11 +394,7 @@ const EmpleadoApp = {
   },
 
   setDefaultDate() {
-    const dateInput = document.getElementById('recordDate');
-    if (dateInput) {
-      const today = new Date().toISOString().split('T')[0];
-      dateInput.value = today;
-    }
+    this.syncDateInputWithPeriod();
   },
 
   updateHoursCalculation() {
@@ -547,6 +555,19 @@ const EmpleadoApp = {
         setTimeout(() => toast.classList.add('hidden'), 4500);
       }
 
+      // Si la fecha guardada pertenece a otro período diferente del actual, sincronizar el selector
+      const periods = DB.getProcessControls();
+      const matchPeriod = periods.find(p => {
+        const r = TimeUtils.getPeriodRange(p);
+        return r.fromDate && r.toDate && dateVal >= r.fromDate && dateVal <= r.toDate;
+      });
+      if (matchPeriod && matchPeriod.periodId !== this.selectedPeriodId && this.selectedPeriodId !== 'ALL') {
+        this.selectedPeriodId = matchPeriod.periodId;
+        sessionStorage.setItem('HACCP_SELECTED_PERIOD_ID', matchPeriod.periodId);
+        const sel = document.getElementById('empPeriodSelect');
+        if (sel) sel.value = matchPeriod.periodId;
+      }
+
       this.renderHistory();
     } catch (err) {
       alert('Error guardando en Google Sheets: ' + err.message);
@@ -559,10 +580,142 @@ const EmpleadoApp = {
     }
   },
 
+  initPeriodSelector() {
+    const select = document.getElementById('empPeriodSelect');
+    if (select) {
+      select.addEventListener('change', (e) => {
+        this.selectedPeriodId = e.target.value;
+        sessionStorage.setItem('HACCP_SELECTED_PERIOD_ID', e.target.value);
+        this.syncDateInputWithPeriod();
+        this.renderHistory();
+      });
+    }
+  },
+
+  populatePeriodSelector() {
+    const select = document.getElementById('empPeriodSelect');
+    if (!select) return;
+
+    const periods = DB.getProcessControls();
+    select.innerHTML = '';
+
+    if (periods.length === 0) {
+      select.innerHTML = '<option value="">Sin períodos registrados</option>';
+      this.selectedPeriodId = null;
+      return;
+    }
+
+    // Identificar el período a seleccionar inicialmente
+    const savedPeriodId = sessionStorage.getItem('HACCP_SELECTED_PERIOD_ID');
+    if (savedPeriodId && (savedPeriodId === 'ALL' || periods.some(p => p.periodId === savedPeriodId))) {
+      this.selectedPeriodId = savedPeriodId;
+    } else if (!this.selectedPeriodId || !periods.some(p => p.periodId === this.selectedPeriodId)) {
+      // Por defecto seleccionar el período más reciente (Actual, que está en índice 0)
+      this.selectedPeriodId = periods[0].periodId;
+    }
+
+    periods.forEach((p, idx) => {
+      const opt = document.createElement('option');
+      opt.value = p.periodId;
+      let labelTag = '';
+      if (idx === 0) {
+        labelTag = ' (Actual)';
+      } else if (idx === 1) {
+        labelTag = ' (Anterior)';
+      }
+      opt.textContent = `Período: ${p.periodTitle}${labelTag}`;
+      if (p.periodId === this.selectedPeriodId) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+
+    // Opción para ver todo el historial general
+    const allOpt = document.createElement('option');
+    allOpt.value = 'ALL';
+    allOpt.textContent = '─── Ver Todos los Períodos (Histórico Completo) ───';
+    if (this.selectedPeriodId === 'ALL') {
+      allOpt.selected = true;
+    }
+    select.appendChild(allOpt);
+
+    select.value = this.selectedPeriodId;
+    this.syncDateInputWithPeriod();
+  },
+
+  getCurrentPeriodFilter() {
+    if (this.selectedPeriodId === 'ALL') {
+      return {
+        isAll: true,
+        fromDate: null,
+        toDate: null,
+        periodTitle: 'Histórico General Completo'
+      };
+    }
+
+    const periods = DB.getProcessControls();
+    let period = periods.find(p => p.periodId === this.selectedPeriodId);
+    if (!period && periods.length > 0) {
+      period = periods[0];
+      this.selectedPeriodId = period.periodId;
+    }
+
+    if (period) {
+      const range = TimeUtils.getPeriodRange(period);
+      return {
+        isAll: false,
+        fromDate: range.fromDate,
+        toDate: range.toDate,
+        periodTitle: period.periodTitle,
+        periodId: period.periodId,
+        period: period
+      };
+    }
+
+    return {
+      isAll: true,
+      fromDate: null,
+      toDate: null,
+      periodTitle: 'Período General'
+    };
+  },
+
+  syncDateInputWithPeriod() {
+    const dateInput = document.getElementById('recordDate');
+    if (!dateInput) return;
+
+    const filter = this.getCurrentPeriodFilter();
+    const today = new Date().toISOString().split('T')[0];
+
+    // Si hoy cae dentro del período seleccionado, mantener hoy
+    if (filter.fromDate && filter.toDate) {
+      if (today >= filter.fromDate && today <= filter.toDate) {
+        dateInput.value = today;
+      } else {
+        // Si hoy está fuera del período, sugerir la fecha final del período
+        dateInput.value = filter.toDate;
+      }
+    } else {
+      dateInput.value = today;
+    }
+  },
+
   renderHistory() {
     if (!this.currentEmployee) return;
 
-    const records = DB.getRecords({ employeeId: this.currentEmployee.id });
+    const filter = this.getCurrentPeriodFilter();
+    const badge = document.getElementById('currentPeriodLabelBadge');
+    if (badge) {
+      badge.textContent = filter.periodTitle;
+    }
+
+    const queryParams = { employeeId: this.currentEmployee.id };
+    if (!filter.isAll) {
+      if (filter.fromDate) queryParams.fromDate = filter.fromDate;
+      if (filter.toDate) queryParams.toDate = filter.toDate;
+    }
+
+    const records = DB.getRecords(queryParams);
     const tbody = document.getElementById('employeeHistoryBody');
     const totalEl = document.getElementById('totalAccumulatedHours');
     const totalCountEl = document.getElementById('totalRecordsCount');
@@ -572,7 +725,10 @@ const EmpleadoApp = {
     if (tbody) {
       tbody.innerHTML = '';
       if (records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-500">No tienes registros de horas extras en este período todavía.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-500 font-medium">
+          No tienes registros de horas extras en el <strong>${filter.periodTitle}</strong> todavía.<br>
+          <span class="text-xs text-slate-400 mt-1 block">Puedes ingresar tus horas trabajadas de este período usando el formulario de arriba.</span>
+        </td></tr>`;
       } else {
         records.forEach(r => {
           totalDecimal += parseFloat(r.decimalHours) || 0;
@@ -605,10 +761,10 @@ const EmpleadoApp = {
     }
 
     // Actualizar Hoja Oficial Imprimible en 1 hoja física (window.print())
-    this.renderPrintableSheet(records, totalDecimal);
+    this.renderPrintableSheet(records, totalDecimal, filter);
   },
 
-  renderPrintableSheet(records, totalDecimal) {
+  renderPrintableSheet(records, totalDecimal, filter = null) {
     if (!this.currentEmployee) return;
 
     const emp = this.currentEmployee;
@@ -623,9 +779,11 @@ const EmpleadoApp = {
     if (areaEl) areaEl.textContent = emp.area || 'Equipo HACCP';
     if (signNameEl) signNameEl.textContent = emp.name;
 
-    // Rango de fechas del período
+    // Rango de fechas del período oficial
     if (dateHeaderEl) {
-      if (records.length > 0) {
+      if (filter && filter.periodTitle && !filter.isAll) {
+        dateHeaderEl.textContent = filter.periodTitle;
+      } else if (records.length > 0) {
         const sorted = [...records].map(r => r.date).filter(Boolean).sort();
         dateHeaderEl.textContent = `${TimeUtils.formatDateDMY(sorted[0])} al ${TimeUtils.formatDateDMY(sorted[sorted.length - 1])}`;
       } else {
@@ -662,9 +820,15 @@ const EmpleadoApp = {
       totalWordsCell.textContent = `(${TimeUtils.toHuman(rounded)})`;
     }
 
-    // Vacaciones
+    // Vacaciones filtradas por el período
     const vacs = DB.getVacations(emp.id);
-    const vacTaken = vacs && vacs.find(v => v.taken);
+    const vacTaken = vacs && vacs.find(v => {
+      if (!v.taken) return false;
+      if (!filter || filter.isAll || !filter.fromDate || !filter.toDate) return true;
+      // Comprobar si las vacaciones se solapan con las fechas del período
+      return (v.fromDate <= filter.toDate && v.toDate >= filter.fromDate);
+    });
+
     const vacSi = document.getElementById('printVacSi');
     const vacNo = document.getElementById('printVacNo');
     const vacFrom = document.getElementById('printVacFrom');

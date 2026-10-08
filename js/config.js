@@ -9,7 +9,7 @@
 window.HACCP_DEFAULT_CONFIG = {
   // Pega aquí la URL de tu Web App de Google Apps Script (termina en /exec)
   // Ejemplo: "https://script.google.com/macros/s/AKfycbx.../exec"
-  googleSheetsUrl: 'https://script.google.com/macros/s/AKfycbxkef4ivfLzZHhC770571dBeo87F5MNKp0QjnQPG7rMULMjf2yWehg-gLHzTd03MXKD/exec',
+  googleSheetsUrl: '',
 
   // Intervalo de auto-refresco y sondeo inteligente en vivo (en milisegundos)
   // 30000 = 30 segundos | 60000 = 1 minuto

@@ -71,6 +71,36 @@ const TimeUtils = {
   cleanPhone(phone) {
     if (!phone) return '';
     return phone.replace(/\D/g, '');
+  },
+
+  // Extrae rango de fechas { fromDate, toDate } a partir de un período
+  getPeriodRange(period) {
+    if (!period) return { fromDate: null, toDate: null };
+
+    // 1. Si periodId tiene formato YYYY-MM-DD_YYYY-MM-DD
+    if (period.periodId && /^\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}$/.test(period.periodId)) {
+      const parts = period.periodId.split('_');
+      return { fromDate: parts[0], toDate: parts[1] };
+    }
+
+    // 2. Extraer de periodTitle (ej: "26/09/2026 al 10/10/2026" o "26-09-2026 al 10-10-2026")
+    const title = (period.periodTitle || '').trim();
+    const matchDMY = title.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+al\s+(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/i);
+    if (matchDMY) {
+      const from = `${matchDMY[3]}-${matchDMY[2].padStart(2, '0')}-${matchDMY[1].padStart(2, '0')}`;
+      const to = `${matchDMY[6]}-${matchDMY[5].padStart(2, '0')}-${matchDMY[4].padStart(2, '0')}`;
+      return { fromDate: from, toDate: to };
+    }
+
+    // 3. Extraer de filas si existen fechas
+    if (period.rows && Array.isArray(period.rows) && period.rows.length > 0) {
+      const dates = period.rows.map(r => r.date).filter(Boolean).sort();
+      if (dates.length > 0) {
+        return { fromDate: dates[0], toDate: dates[dates.length - 1] };
+      }
+    }
+
+    return { fromDate: null, toDate: null };
   }
 };
 
@@ -298,45 +328,7 @@ const DB = {
           createdAt: '2026-08-01'
         }
       ],
-      processControls: [
-        {
-          periodId: '2026-08-26_2026-09-10',
-          periodTitle: '26/08/2026 al 10/09/2026',
-          rows: [
-            { date: '2026-08-26', day: 'Miércoles', horaMatanza: '16:25', horaViscera: '17:15', horaDeshuese: '18:00', horaDescargaCarton: '18:45', observaciones: 'Recepción tardía de lote' },
-            { date: '2026-08-27', day: 'Jueves', horaMatanza: '15:55', horaViscera: '16:40', horaDeshuese: '17:30', horaDescargaCarton: '18:00', observaciones: 'Faena continua' },
-            { date: '2026-08-28', day: 'Viernes', horaMatanza: '16:25', horaViscera: '17:10', horaDeshuese: '17:50', horaDescargaCarton: '18:30', observaciones: 'Inspección PCC' },
-            { date: '2026-08-29', day: 'Sábado', horaMatanza: '16:30', horaViscera: '17:00', horaDeshuese: '17:45', horaDescargaCarton: '18:15', observaciones: 'Despacho extraordinario' },
-            { date: '2026-08-31', day: 'Lunes', horaMatanza: '15:30', horaViscera: '18:05', horaDeshuese: '18:05', horaDescargaCarton: '19:00', observaciones: 'Limpieza e inspección de sala' },
-            { date: '2026-09-01', day: 'Martes', horaMatanza: '15:45', horaViscera: '18:30', horaDeshuese: '18:30', horaDescargaCarton: '19:15', observaciones: 'Empaque de cajas para exportación' },
-            { date: '2026-09-02', day: 'Miércoles', horaMatanza: '15:00', horaViscera: '17:15', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: 'Muestreo microbiológico' },
-            { date: '2026-09-03', day: 'Jueves', horaMatanza: '15:10', horaViscera: '17:30', horaDeshuese: '17:30', horaDescargaCarton: '18:10', observaciones: 'Cierre de lote' },
-            { date: '2026-09-04', day: 'Viernes', horaMatanza: '15:00', horaViscera: '15:45', horaDeshuese: '16:00', horaDescargaCarton: '17:00', observaciones: 'Cuadratura de inventario' },
-            { date: '2026-09-05', day: 'Sábado', horaMatanza: '15:15', horaViscera: '16:00', horaDeshuese: '16:45', horaDescargaCarton: '17:30', observaciones: 'Muestreo de cortes refrigerados' },
-            { date: '2026-09-07', day: 'Lunes', horaMatanza: '15:00', horaViscera: '15:30', horaDeshuese: '16:00', horaDescargaCarton: '16:00', observaciones: 'Carga de contenedores' },
-            { date: '2026-09-08', day: 'Martes', horaMatanza: '15:00', horaViscera: '15:30', horaDeshuese: '16:15', horaDescargaCarton: '17:00', observaciones: 'Apoyo deshuese y empaque' }
-          ]
-        },
-        {
-          periodId: '2026-09-26_2026-10-10',
-          periodTitle: '26/09/2026 al 10/10/2026',
-          rows: [
-            { date: '2026-09-26', day: 'Sábado', horaMatanza: '16:25', horaViscera: '17:10', horaDeshuese: '18:05', horaDescargaCarton: '19:00', observaciones: 'Turno extendido por recepción' },
-            { date: '2026-09-28', day: 'Lunes', horaMatanza: '15:55', horaViscera: '16:30', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: 'Operación normal' },
-            { date: '2026-09-29', day: 'Martes', horaMatanza: '15:30', horaViscera: '16:15', horaDeshuese: '17:00', horaDescargaCarton: '17:45', observaciones: '' },
-            { date: '2026-09-30', day: 'Miércoles', horaMatanza: '16:10', horaViscera: '16:50', horaDeshuese: '17:40', horaDescargaCarton: '18:20', observaciones: 'Lote especial' },
-            { date: '2026-10-01', day: 'Jueves', horaMatanza: '15:45', horaViscera: '16:20', horaDeshuese: '17:10', horaDescargaCarton: '17:50', observaciones: '' },
-            { date: '2026-10-02', day: 'Viernes', horaMatanza: '16:00', horaViscera: '16:45', horaDeshuese: '17:50', horaDescargaCarton: '18:30', observaciones: 'Mantenimiento en sierra' },
-            { date: '2026-10-03', day: 'Sábado', horaMatanza: '14:30', horaViscera: '15:10', horaDeshuese: '16:00', horaDescargaCarton: '16:40', observaciones: 'Medio turno' },
-            { date: '2026-10-05', day: 'Lunes', horaMatanza: '15:35', horaViscera: '16:15', horaDeshuese: '17:05', horaDescargaCarton: '17:45', observaciones: '' },
-            { date: '2026-10-06', day: 'Martes', horaMatanza: '15:40', horaViscera: '16:20', horaDeshuese: '17:00', horaDescargaCarton: '17:40', observaciones: '' },
-            { date: '2026-10-07', day: 'Miércoles', horaMatanza: '16:05', horaViscera: '16:45', horaDeshuese: '17:35', horaDescargaCarton: '18:15', observaciones: '' },
-            { date: '2026-10-08', day: 'Jueves', horaMatanza: '15:50', horaViscera: '16:30', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: '' },
-            { date: '2026-10-09', day: 'Viernes', horaMatanza: '16:15', horaViscera: '17:00', horaDeshuese: '18:00', horaDescargaCarton: '18:45', observaciones: 'Alto volumen de matanza' },
-            { date: '2026-10-10', day: 'Sábado', horaMatanza: '14:15', horaViscera: '14:55', horaDeshuese: '15:45', horaDescargaCarton: '16:30', observaciones: 'Cierre de período' }
-          ]
-        }
-      ]
+      processControls: this.getDefaultPeriods()
     };
   },
 
@@ -777,8 +769,12 @@ const DB = {
       records = records.filter(r => r.date <= filters.toDate);
     }
 
-    // Orden cronológico
-    records.sort((a, b) => (a.date > b.date ? 1 : -1));
+    // Orden cronológico: por defecto del más reciente al más antiguo
+    if (filters.sortOrder === 'asc') {
+      records.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+    } else {
+      records.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+    }
     return records;
   },
 
@@ -845,9 +841,93 @@ const DB = {
   },
 
   // --- MÉTODOS PARA SALIDA DE PROCESOS ---
+  getDefaultPeriods() {
+    return [
+      {
+        periodId: '2026-09-26_2026-10-10',
+        periodTitle: '26/09/2026 al 10/10/2026',
+        rows: [
+          { date: '2026-09-26', day: 'Sábado', horaMatanza: '16:25', horaViscera: '17:10', horaDeshuese: '18:05', horaDescargaCarton: '19:00', observaciones: 'Turno extendido por recepción' },
+          { date: '2026-09-28', day: 'Lunes', horaMatanza: '15:55', horaViscera: '16:30', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: 'Operación normal' },
+          { date: '2026-09-29', day: 'Martes', horaMatanza: '15:30', horaViscera: '16:15', horaDeshuese: '17:00', horaDescargaCarton: '17:45', observaciones: '' },
+          { date: '2026-09-30', day: 'Miércoles', horaMatanza: '16:10', horaViscera: '16:50', horaDeshuese: '17:40', horaDescargaCarton: '18:20', observaciones: 'Lote especial' },
+          { date: '2026-10-01', day: 'Jueves', horaMatanza: '15:45', horaViscera: '16:20', horaDeshuese: '17:10', horaDescargaCarton: '17:50', observaciones: '' },
+          { date: '2026-10-02', day: 'Viernes', horaMatanza: '16:00', horaViscera: '16:45', horaDeshuese: '17:50', horaDescargaCarton: '18:30', observaciones: 'Mantenimiento en sierra' },
+          { date: '2026-10-03', day: 'Sábado', horaMatanza: '14:30', horaViscera: '15:10', horaDeshuese: '16:00', horaDescargaCarton: '16:40', observaciones: 'Medio turno' },
+          { date: '2026-10-05', day: 'Lunes', horaMatanza: '15:35', horaViscera: '16:15', horaDeshuese: '17:05', horaDescargaCarton: '17:45', observaciones: '' },
+          { date: '2026-10-06', day: 'Martes', horaMatanza: '15:40', horaViscera: '16:20', horaDeshuese: '17:00', horaDescargaCarton: '17:40', observaciones: '' },
+          { date: '2026-10-07', day: 'Miércoles', horaMatanza: '16:05', horaViscera: '16:45', horaDeshuese: '17:35', horaDescargaCarton: '18:15', observaciones: '' },
+          { date: '2026-10-08', day: 'Jueves', horaMatanza: '15:50', horaViscera: '16:30', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: '' },
+          { date: '2026-10-09', day: 'Viernes', horaMatanza: '16:15', horaViscera: '17:00', horaDeshuese: '18:00', horaDescargaCarton: '18:45', observaciones: 'Alto volumen de matanza' },
+          { date: '2026-10-10', day: 'Sábado', horaMatanza: '14:15', horaViscera: '14:55', horaDeshuese: '15:45', horaDescargaCarton: '16:30', observaciones: 'Cierre de período' }
+        ]
+      },
+      {
+        periodId: '2026-08-26_2026-09-10',
+        periodTitle: '26/08/2026 al 10/09/2026',
+        rows: [
+          { date: '2026-08-26', day: 'Miércoles', horaMatanza: '16:25', horaViscera: '17:15', horaDeshuese: '18:00', horaDescargaCarton: '18:45', observaciones: 'Recepción tardía de lote' },
+          { date: '2026-08-27', day: 'Jueves', horaMatanza: '15:55', horaViscera: '16:40', horaDeshuese: '17:30', horaDescargaCarton: '18:00', observaciones: 'Faena continua' },
+          { date: '2026-08-28', day: 'Viernes', horaMatanza: '16:25', horaViscera: '17:10', horaDeshuese: '17:50', horaDescargaCarton: '18:30', observaciones: 'Inspección PCC' },
+          { date: '2026-08-29', day: 'Sábado', horaMatanza: '16:30', horaViscera: '17:00', horaDeshuese: '17:45', horaDescargaCarton: '18:15', observaciones: 'Despacho extraordinario' },
+          { date: '2026-08-31', day: 'Lunes', horaMatanza: '15:30', horaViscera: '18:05', horaDeshuese: '18:05', horaDescargaCarton: '19:00', observaciones: 'Limpieza e inspección de sala' },
+          { date: '2026-09-01', day: 'Martes', horaMatanza: '15:45', horaViscera: '18:30', horaDeshuese: '18:30', horaDescargaCarton: '19:15', observaciones: 'Empaque de cajas para exportación' },
+          { date: '2026-09-02', day: 'Miércoles', horaMatanza: '15:00', horaViscera: '17:15', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: 'Muestreo microbiológico' },
+          { date: '2026-09-03', day: 'Jueves', horaMatanza: '15:10', horaViscera: '17:30', horaDeshuese: '17:30', horaDescargaCarton: '18:10', observaciones: 'Cierre de lote' },
+          { date: '2026-09-04', day: 'Viernes', horaMatanza: '15:00', horaViscera: '15:45', horaDeshuese: '16:00', horaDescargaCarton: '17:00', observaciones: 'Cuadratura de inventario' },
+          { date: '2026-09-05', day: 'Sábado', horaMatanza: '15:15', horaViscera: '16:00', horaDeshuese: '16:45', horaDescargaCarton: '17:30', observaciones: 'Muestreo de cortes refrigerados' },
+          { date: '2026-09-07', day: 'Lunes', horaMatanza: '15:00', horaViscera: '15:30', horaDeshuese: '16:00', horaDescargaCarton: '16:00', observaciones: 'Carga de contenedores' },
+          { date: '2026-09-08', day: 'Martes', horaMatanza: '15:00', horaViscera: '15:30', horaDeshuese: '16:15', horaDescargaCarton: '17:00', observaciones: 'Apoyo deshuese y empaque' }
+        ]
+      },
+      {
+        periodId: '2026-07-26_2026-08-10',
+        periodTitle: '26/07/2026 al 10/08/2026',
+        rows: [
+          { date: '2026-07-27', day: 'Lunes', horaMatanza: '15:30', horaViscera: '16:15', horaDeshuese: '17:00', horaDescargaCarton: '17:30', observaciones: 'Operación regular de apertura' },
+          { date: '2026-07-28', day: 'Martes', horaMatanza: '15:45', horaViscera: '16:30', horaDeshuese: '17:15', horaDescargaCarton: '17:45', observaciones: '' },
+          { date: '2026-07-29', day: 'Miércoles', horaMatanza: '16:00', horaViscera: '16:40', horaDeshuese: '17:30', horaDescargaCarton: '18:00', observaciones: '' },
+          { date: '2026-07-30', day: 'Jueves', horaMatanza: '15:50', horaViscera: '16:30', horaDeshuese: '17:20', horaDescargaCarton: '18:10', observaciones: 'Control PCC y toma de muestras' },
+          { date: '2026-07-31', day: 'Viernes', horaMatanza: '16:10', horaViscera: '16:55', horaDeshuese: '17:45', horaDescargaCarton: '18:30', observaciones: 'Cierre de mes' },
+          { date: '2026-08-01', day: 'Sábado', horaMatanza: '14:30', horaViscera: '15:15', horaDeshuese: '16:00', horaDescargaCarton: '16:30', observaciones: 'Medio turno de faena' },
+          { date: '2026-08-03', day: 'Lunes', horaMatanza: '15:40', horaViscera: '16:20', horaDeshuese: '17:05', horaDescargaCarton: '17:45', observaciones: '' },
+          { date: '2026-08-04', day: 'Martes', horaMatanza: '15:35', horaViscera: '16:15', horaDeshuese: '17:00', horaDescargaCarton: '17:40', observaciones: '' },
+          { date: '2026-08-05', day: 'Miércoles', horaMatanza: '16:00', horaViscera: '16:45', horaDeshuese: '17:30', horaDescargaCarton: '18:15', observaciones: '' },
+          { date: '2026-08-06', day: 'Jueves', horaMatanza: '15:45', horaViscera: '16:30', horaDeshuese: '17:15', horaDescargaCarton: '18:00', observaciones: '' },
+          { date: '2026-08-07', day: 'Viernes', horaMatanza: '16:20', horaViscera: '17:05', horaDeshuese: '17:55', horaDescargaCarton: '18:40', observaciones: 'Inspección veterinaria' },
+          { date: '2026-08-08', day: 'Sábado', horaMatanza: '14:15', horaViscera: '15:00', horaDeshuese: '15:45', horaDescargaCarton: '16:15', observaciones: '' },
+          { date: '2026-08-10', day: 'Lunes', horaMatanza: '15:00', horaViscera: '15:30', horaDeshuese: '16:15', horaDescargaCarton: '17:00', observaciones: 'Cierre de ciclo' }
+        ]
+      }
+    ];
+  },
+
   getProcessControls() {
     const data = this.load();
-    return data.processControls || [];
+    let list = Array.isArray(data.processControls) ? [...data.processControls] : [];
+
+    // Garantizar que existan al menos los 3 períodos base si no han sido agregados
+    const defaults = this.getDefaultPeriods();
+    defaults.forEach(dp => {
+      const exists = list.some(p => 
+        (p.periodId && p.periodId === dp.periodId) || 
+        (p.periodTitle && p.periodTitle.trim().toLowerCase() === dp.periodTitle.trim().toLowerCase())
+      );
+      if (!exists) {
+        list.push(dp);
+      }
+    });
+
+    // Ordenar cronológicamente descendente (el período más reciente arriba)
+    list.sort((a, b) => {
+      const rangeA = TimeUtils.getPeriodRange(a);
+      const rangeB = TimeUtils.getPeriodRange(b);
+      const dateA = rangeA.toDate || rangeA.fromDate || a.periodId || '';
+      const dateB = rangeB.toDate || rangeB.fromDate || b.periodId || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    return list;
   },
 
   getProcessControlByPeriod(periodId) {

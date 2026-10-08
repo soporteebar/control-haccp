@@ -169,8 +169,15 @@
         </div>
       </div>
 
-      <!-- Barra de Filtros por Fechas y Empleado -->
+      <!-- Barra de Filtros por Fechas, Período y Empleado -->
       <div class="filter-bar">
+        <div class="filter-group min-w-[220px]">
+          <label class="filter-label" for="filterPeriod">Filtrar por Período Oficial (Opcional)</label>
+          <select id="filterPeriod" class="form-control font-medium">
+            <option value="">Todos los Períodos (Rango Libre)</option>
+            <!-- Se puebla dinámicamente -->
+          </select>
+        </div>
         <div class="filter-group">
           <label class="filter-label" for="filterEmployee">Filtrar por Empleado</label>
           <select id="filterEmployee" class="form-control">
@@ -185,7 +192,7 @@
           <label class="filter-label" for="filterDateTo">Fecha Hasta</label>
           <input type="date" id="filterDateTo" class="form-control">
         </div>
-        <div class="flex gap-2 items-center">
+        <div class="flex gap-2 items-center flex-wrap">
           <button type="button" id="btnClearFilter" class="btn btn-secondary text-xs">Limpiar Filtros</button>
           <button type="button" id="btnExportFiltered" class="btn btn-excel text-xs">
             <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M21.17 3.25Q21.5 3.25 21.75 3.5 22 3.75 22 4.08V19.92Q22 20.25 21.75 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.25 20.5 7 20.25 7 19.92V17H2.83Q2.5 17 2.25 16.75 2 16.5 2 16.17V7.83Q2 7.5 2.25 7.25 2.5 7 2.83 7H7V4.08Q7 3.75 7.25 3.5 7.5 3.25 7.83 3.25H21.17M7 15H3.5V9H7V15M20.5 4.75H8.5V19.25H20.5V4.75M16.5 12L18.5 16H16.2L15.2 13.8L14.2 16H11.9L13.9 12L12 8H14.3L15.2 10.2L16.1 8H18.4L16.5 12Z"/></svg>
@@ -224,7 +231,10 @@
       <!-- Tabla de Reportes de Horas Extras -->
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Registros Detallados de Horas Extras</h3>
+          <div class="flex items-center gap-2">
+            <h3 class="card-title">Registros Detallados de Horas Extras</h3>
+            <span id="adminPeriodBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold hidden sm:inline-block">Todos los Períodos</span>
+          </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" id="btnOpenCreateRecord" class="btn btn-primary text-xs font-bold">
               + Nuevo Registro
