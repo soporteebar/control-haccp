@@ -220,7 +220,8 @@
               <option value="Descarga de Cartón">Descarga de Cartón</option>
               <option value="Carga">Carga y Despacho</option>
               <option value="Apoyo Deshuese">Apoyo Deshuese</option>
-              <option value="Monitoreo HACCP">Monitoreo de Calidad / PCC HACCP</option>
+              <option value="Monitoreo HACCP">Monitoreo de Calidad</option>
+              <option value="Monitoreo HACCP">Otros</option>
             </select>
             <span class="text-[11px] text-slate-500 block mt-0.5">El sistema vinculará este proceso con la hora oficial de cierre en la planilla gerencial.</span>
           </div>
@@ -349,97 +350,6 @@
 
     </div>
 
-    <!-- =========================================================================
-         HOJA OFICIAL IMPRIMIBLE (Réplica exacta de la Imagen 2 para 1 hoja física)
-         Visible únicamente al imprimir (window.print() o Ctrl+P)
-         ========================================================================= -->
-    <div id="officialPrintSheet" class="official-print-sheet">
-      <!-- Encabezado Oficial tipo Imagen 2 -->
-      <div class="print-official-header">
-        <div class="print-header-top">
-          <img src="assets/logo-macesa.svg" alt="MACESA" class="print-logo">
-          <div class="print-title-box">
-            <h1 class="print-title">Justificación de Horas Extras- Equipo HACCP</h1>
-          </div>
-          <div class="print-date-box">
-            <span>Fecha: <strong id="printHeaderDate">____/____/________</strong></span>
-          </div>
-        </div>
-
-        <div class="print-employee-info">
-          <div class="print-info-row">
-            <span>Nombre: <strong id="printEmpName">Colaborador</strong></span>
-            <span>Código: <strong id="printEmpCode">EMP-01</strong></span>
-            <span>Área: <strong id="printEmpArea">Equipo HACCP</strong></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tabla Principal de Horas Extras -->
-      <table class="print-table print-overtime-table">
-        <thead>
-          <tr>
-            <th style="width: 14%;">FECHA</th>
-            <th style="width: 26%;">CANTIDAD DE HORAS EXTRAS</th>
-            <th style="width: 60%;">JUSTIFICACIÓN</th>
-          </tr>
-        </thead>
-        <tbody id="printOvertimeBody">
-          <!-- Filas dinámicas -->
-        </tbody>
-        <tfoot>
-          <tr class="print-total-row">
-            <td><strong>TOTAL DE HORAS:</strong></td>
-            <td id="printTotalHoursCell"><strong>0.00 H</strong></td>
-            <td id="printTotalWordsCell"></td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <!-- Tabla de Vacaciones (Exacta como Imagen 2) -->
-      <div class="print-vacations-section">
-        <table class="print-table print-vacation-table">
-          <thead>
-            <tr>
-              <th colspan="2" style="width: 28%;">¿Vacaciones tomadas?</th>
-              <th colspan="2" style="width: 44%;">Fecha</th>
-              <th style="width: 28%;">Cantidad de dias</th>
-            </tr>
-            <tr class="print-subhead">
-              <th style="width: 14%;">SI</th>
-              <th style="width: 14%;">NO</th>
-              <th style="width: 22%;">De :</th>
-              <th style="width: 22%;">hasta:</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="printVacationsBody">
-            <tr>
-              <td id="printVacSi" class="text-center font-bold"></td>
-              <td id="printVacNo" class="text-center font-bold">X</td>
-              <td id="printVacFrom" class="text-center">-</td>
-              <td id="printVacTo" class="text-center">-</td>
-              <td id="printVacDays" class="text-center">0</td>
-            </tr>
-            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Sección de Firma Física al pie de página -->
-      <div class="print-signatures-container">
-        <div class="print-signature-col">
-          <div class="print-sign-line"></div>
-          <p class="print-sign-label">Firma del Empleado</p>
-          <p class="print-sign-sub" id="printSignEmpName">Colaborador</p>
-        </div>
-        <div class="print-signature-col">
-          <div class="print-sign-line"></div>
-          <p class="print-sign-label">Firma Supervisor / Responsable HACCP</p>
-          <p class="print-sign-sub">Revisado y Aprobado</p>
-        </div>
-      </div>
-    </div>
 
   </main>
 
