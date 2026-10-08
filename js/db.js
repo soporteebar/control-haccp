@@ -1179,7 +1179,7 @@ const DB = {
   // Sincronizar control de procesos a la hoja "SalidaProcesos"
   async syncProcessesToGoogleSheets(periodData) {
     const config = this.getConfig();
-    if (!config.googleSheetsUrl) return { success: false, offline: true };
+    if (!config.googleSheetsUrl) return { success: false, offline: true, error: 'URL de Google Sheets no configurada en Pestaña 4' };
 
     try {
       if (this.SyncEngine) this.SyncEngine.emitSyncState('syncing');
@@ -1196,7 +1196,20 @@ const DB = {
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json().catch(() => ({ status: 'success' }));
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        data = null;
+      }
+
+      if (!res.ok || !data || data.status === 'error' || data.error) {
+        const errMsg = (data && (data.error || data.message)) || `Error HTTP ${res.status} al sincronizar con Google Sheets`;
+        console.warn('⚠️ Error de Google Sheets al sincronizar procesos:', errMsg);
+        if (this.SyncEngine) this.SyncEngine.emitSyncState('error', { error: errMsg });
+        return { success: false, error: errMsg, data };
+      }
+
       console.log('✅ Salida de Procesos sincronizada con Google Sheets');
       if (this.SyncEngine) {
         this.SyncEngine.lastSyncTime = new Date();
@@ -1213,7 +1226,7 @@ const DB = {
   // Eliminar período de salida de procesos en Google Sheets
   async syncProcessDeleteToGoogleSheets(periodId) {
     const config = this.getConfig();
-    if (!config.googleSheetsUrl) return { success: false, offline: true };
+    if (!config.googleSheetsUrl) return { success: false, offline: true, error: 'URL de Google Sheets no configurada' };
 
     try {
       if (this.SyncEngine) this.SyncEngine.emitSyncState('syncing');
@@ -1226,7 +1239,20 @@ const DB = {
           timestamp: new Date().toISOString()
         })
       });
-      const data = await res.json().catch(() => ({ status: 'success' }));
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        data = null;
+      }
+
+      if (!res.ok || !data || data.status === 'error' || data.error) {
+        const errMsg = (data && (data.error || data.message)) || `Error HTTP ${res.status} al eliminar en Google Sheets`;
+        console.warn('⚠️ Error al eliminar período en Google Sheets:', errMsg);
+        if (this.SyncEngine) this.SyncEngine.emitSyncState('error', { error: errMsg });
+        return { success: false, error: errMsg, data };
+      }
+
       console.log('🗑️ Período de procesos eliminado de Google Sheets:', periodId);
       if (this.SyncEngine) {
         this.SyncEngine.lastSyncTime = new Date();
@@ -1335,13 +1361,13 @@ const DB = {
   async saveProcessControlAsync(periodData) {
     const p = this.saveProcessControl(periodData, false);
     const syncRes = await this.syncProcessesToGoogleSheets(p);
-    return { ...p, cloudSynced: syncRes.success };
+    return { ...p, cloudSynced: syncRes.success, syncError: syncRes.error };
   },
 
   async deleteProcessControlAsync(periodId) {
     const deleted = this.deleteProcessControl(periodId, false);
     const syncRes = await this.syncProcessDeleteToGoogleSheets(periodId);
-    return { success: deleted, cloudSynced: syncRes.success };
+    return { success: deleted, cloudSynced: syncRes.success, syncError: syncRes.error };
   },
 
   async saveAdminUserAsync(user) {

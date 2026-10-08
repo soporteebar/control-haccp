@@ -738,45 +738,56 @@ function doPost(e) {
     }
 
     // =========================================================================
-    // MÓDULO 3: CONTROL DE SALIDA DE PROCESOS (CRUD EN LOTE)
+    // MÓDULO 3: CONTROL DE SALIDA DE PROCESOS (CRUD EN LOTE RESILIENTE)
     // =========================================================================
     if (action === "save_process_control") {
       const sheet = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
+      const targetCols = HEADERS_PROCESOS.length; // Exactamente 10 columnas
       const periodId = (data.periodId || "").toString().trim();
       const periodTitle = (data.periodTitle || "General").toString().trim();
 
-      const existingData = sheet.getDataRange().getValues();
+      const existingData = sheet.getLastRow() > 0 ? sheet.getDataRange().getValues() : [];
       
-      // Filtrar en memoria para excluir filas del período a reemplazar
-      const remainingRows = existingData.filter((r, idx) => {
-        if (idx === 0) return true; // Mantener encabezado
+      // Filtrar filas existentes de otros períodos y normalizar a exactamente targetCols
+      const cleanRemaining = [];
+      for (let i = 1; i < existingData.length; i++) {
+        const r = existingData[i];
         const rowPId = (r[0] || "").toString().trim();
         const rowPTitle = (r[1] || "").toString().trim();
-        if (periodId && rowPId === periodId) return false;
-        if (periodTitle && rowPTitle === periodTitle) return false;
-        return true;
-      });
 
-      // Crear las nuevas filas en memoria
-      const newRows = [];
+        // Omitir filas del período que estamos guardando (para reemplazarlas limpiamente)
+        if (periodId && rowPId === periodId) continue;
+        if (periodTitle && rowPTitle === periodTitle) continue;
+        // Omitir filas totalmente vacías
+        if (!rowPId && !rowPTitle && !r[2]) continue;
+
+        const normalizedRow = new Array(targetCols).fill("");
+        for (let c = 0; c < targetCols; c++) {
+          normalizedRow[c] = (r[c] !== undefined && r[c] !== null) ? r[c] : "";
+        }
+        cleanRemaining.push(normalizedRow);
+      }
+
+      // Preparar las filas del período actual
+      const currentPeriodRows = [];
       if (Array.isArray(data.rows) && data.rows.length > 0) {
         data.rows.forEach(r => {
-          newRows.push([
+          currentPeriodRows.push([
             periodId || periodTitle,
             periodTitle,
-            r.date || "",
-            r.day || "",
+            formatDateString(r.date) || "",
+            String(r.day || ""),
             formatTimeString(r.horaMatanza),
             formatTimeString(r.horaViscera),
             formatTimeString(r.horaDeshuese),
             formatTimeString(r.horaDescargaCarton),
-            r.observaciones || "",
+            String(r.observaciones || ""),
             now
           ]);
         });
       } else {
         // Preservar el período nuevo en Google Sheets aunque aún no tenga filas de fechas
-        newRows.push([
+        currentPeriodRows.push([
           periodId || periodTitle,
           periodTitle,
           "",
@@ -790,38 +801,56 @@ function doPost(e) {
         ]);
       }
 
-      const finalData = remainingRows.concat(newRows);
+      // Estructura completa: encabezado canónico + otros períodos + nuevo período
+      const finalRows = [HEADERS_PROCESOS, ...cleanRemaining, ...currentPeriodRows];
+
+      // Escribir en Google Sheets con dimensiones exactas para evitar excepciones de columnas
       sheet.clearContents();
-      sheet.getRange(1, 1, finalData.length, finalData[0].length).setValues(finalData);
+      sheet.getRange(1, 1, finalRows.length, targetCols).setValues(finalRows);
+      sheet.getRange(1, 1, 1, targetCols).setBackground("#059669").setFontColor("#ffffff").setFontWeight("bold");
+      sheet.setFrozenRows(1);
 
       return createJsonResponse({
         status: "success",
-        message: "Control de Salida de Procesos guardado en Google Sheets",
-        periodId: periodId
+        message: "Control de Salida de Procesos guardado exitosamente en Google Sheets",
+        periodId: periodId,
+        periodTitle: periodTitle,
+        rowsCount: currentPeriodRows.length
       });
     }
 
     if (action === "delete_process_period") {
       const sheet = getOrCreateSheet(ss, "SalidaProcesos", HEADERS_PROCESOS, "#059669");
+      const targetCols = HEADERS_PROCESOS.length;
       const periodId = (data.periodId || "").toString().trim();
       const periodTitle = (data.periodTitle || "").toString().trim();
 
-      const existingData = sheet.getDataRange().getValues();
+      const existingData = sheet.getLastRow() > 0 ? sheet.getDataRange().getValues() : [];
       let deletedCount = 0;
-      const remainingRows = existingData.filter((r, idx) => {
-        if (idx === 0) return true; // Encabezado
+      const cleanRemaining = [];
+
+      for (let i = 1; i < existingData.length; i++) {
+        const r = existingData[i];
         const rowPId = (r[0] || "").toString().trim();
         const rowPTitle = (r[1] || "").toString().trim();
         if ((periodId && rowPId === periodId) || (periodTitle && rowPTitle === periodTitle)) {
           deletedCount++;
-          return false;
+          continue;
         }
-        return true;
-      });
 
+        const normalizedRow = new Array(targetCols).fill("");
+        for (let c = 0; c < targetCols; c++) {
+          normalizedRow[c] = (r[c] !== undefined && r[c] !== null) ? r[c] : "";
+        }
+        cleanRemaining.push(normalizedRow);
+      }
+
+      const finalRows = [HEADERS_PROCESOS, ...cleanRemaining];
       sheet.clearContents();
-      if (remainingRows.length > 0) {
-        sheet.getRange(1, 1, remainingRows.length, remainingRows[0].length).setValues(remainingRows);
+      if (finalRows.length > 0) {
+        sheet.getRange(1, 1, finalRows.length, targetCols).setValues(finalRows);
+        sheet.getRange(1, 1, 1, targetCols).setBackground("#059669").setFontColor("#ffffff").setFontWeight("bold");
+        sheet.setFrozenRows(1);
       }
 
       return createJsonResponse({

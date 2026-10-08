@@ -262,6 +262,31 @@ const ProcesosModule = {
     const period = DB.getProcessControlByPeriod(this.currentPeriodId);
     if (!period) return;
 
+    // Extraer valores actuales directamente de las filas del DOM para no perder cambios sin blur
+    const tbody = document.getElementById('processTableBody');
+    if (tbody) {
+      const trs = tbody.querySelectorAll('tr');
+      trs.forEach((tr, idx) => {
+        if (!this.currentRows[idx]) return;
+        const dateIn = tr.querySelector('[data-field="date"]');
+        const hMat = tr.querySelector('[data-field="horaMatanza"]');
+        const hVis = tr.querySelector('[data-field="horaViscera"]');
+        const hDes = tr.querySelector('[data-field="horaDeshuese"]');
+        const hCar = tr.querySelector('[data-field="horaDescargaCarton"]');
+        const obs = tr.querySelector('[data-field="observaciones"]');
+
+        if (dateIn && dateIn.value) {
+          this.currentRows[idx].date = dateIn.value;
+          this.currentRows[idx].day = TimeUtils.getDayName(dateIn.value);
+        }
+        if (hMat) this.currentRows[idx].horaMatanza = TimeUtils.normalizeTimeString(hMat.value);
+        if (hVis) this.currentRows[idx].horaViscera = TimeUtils.normalizeTimeString(hVis.value);
+        if (hDes) this.currentRows[idx].horaDeshuese = TimeUtils.normalizeTimeString(hDes.value);
+        if (hCar) this.currentRows[idx].horaDescargaCarton = TimeUtils.normalizeTimeString(hCar.value);
+        if (obs) this.currentRows[idx].observaciones = obs.value.trim();
+      });
+    }
+
     // Normalizar todas las horas de cada fila al formato estricto hh:mm
     this.currentRows.forEach(r => {
       r.horaMatanza = TimeUtils.normalizeTimeString(r.horaMatanza);
@@ -285,11 +310,11 @@ const ProcesosModule = {
         if (res && res.cloudSynced) {
           alert('✅ Control de Salida de Procesos guardado y sincronizado en Google Sheets.');
         } else {
-          alert('✅ Control de Salida de Procesos guardado exitosamente.');
+          alert(`⚠️ Guardado localmente, pero hubo un error al sincronizar con Google Sheets:\n\n${res?.syncError || 'Verifica la URL en la Pestaña 4 y la conexión'}`);
         }
       } else {
         DB.saveProcessControl(period);
-        alert('✅ Control de Salida de Procesos guardado exitosamente.');
+        alert('✅ Control de Salida de Procesos guardado localmente.');
       }
       this.loadPeriods();
       this.selectPeriod(this.currentPeriodId);
@@ -319,6 +344,23 @@ const ProcesosModule = {
     const title = prompt('Ingresa el título o rango del nuevo período (ej: 11/10/2026 al 25/10/2026):');
     if (!title || !title.trim()) return;
 
+    const config = DB.getConfig();
+    if (!config.googleSheetsUrl) {
+      const proceed = confirm(
+        '⚠️ Atención: Aún no has configurado la URL de Google Sheets en la Pestaña 4.\n\n' +
+        'El período se creará únicamente de forma local en este navegador hasta que ingreses tu URL de Google Sheets.\n\n' +
+        '¿Deseas continuar y crearlo localmente?'
+      );
+      if (!proceed) return;
+    }
+
+    const btn = document.getElementById('btnNewPeriod');
+    const origText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Creando período...';
+    }
+
     const periodId = 'period_' + Date.now();
     const today = new Date().toISOString().split('T')[0];
     const newPeriod = {
@@ -337,15 +379,38 @@ const ProcesosModule = {
       ]
     };
 
-    this.currentPeriodId = periodId;
-    if (typeof DB.saveProcessControlAsync === 'function') {
-      await DB.saveProcessControlAsync(newPeriod);
-    } else {
-      DB.saveProcessControl(newPeriod);
+    try {
+      this.currentPeriodId = periodId;
+      let syncResult = null;
+      if (typeof DB.saveProcessControlAsync === 'function') {
+        syncResult = await DB.saveProcessControlAsync(newPeriod);
+      } else {
+        DB.saveProcessControl(newPeriod);
+      }
+
+      this.loadPeriods();
+      this.selectPeriod(periodId);
+
+      if (syncResult && syncResult.cloudSynced) {
+        alert(`✅ Período "${title.trim()}" creado y guardado en Google Sheets.`);
+      } else if (syncResult && syncResult.syncError) {
+        alert(
+          `⚠️ El período "${title.trim()}" se guardó localmente, pero NO se pudo subir a Google Sheets:\n\n` +
+          `${syncResult.syncError}\n\n` +
+          `Verifica tu URL en la Pestaña 4 y pulsa "Guardar Cambios de Procesos" para reintentar.`
+        );
+      } else {
+        alert(`✅ Período "${title.trim()}" creado. Ya puedes ingresar los horarios de faena.`);
+      }
+    } catch (err) {
+      console.error('Error creando período:', err);
+      alert('❌ Error al crear el período: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
     }
-    this.loadPeriods();
-    this.selectPeriod(periodId);
-    alert(`✅ Período "${title.trim()}" creado y guardado. Ya puedes ingresar los horarios de faena.`);
   }
 };
 
