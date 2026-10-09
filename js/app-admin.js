@@ -412,14 +412,11 @@ const AdminApp = {
     periodSelect.innerHTML = '<option value="">Todos los Períodos (Opcional)</option>';
 
     periods.forEach((p, idx) => {
-      const opt = document.createElement('option');
-      opt.value = p.periodId;
-      let labelTag = '';
-      if (idx === 0) labelTag = ' (Actual)';
-      else if (idx === 1) labelTag = ' (Anterior)';
-      opt.textContent = `Período: ${p.periodTitle}${labelTag}`;
-      if (p.periodId === currentVal) opt.selected = true;
-      periodSelect.appendChild(opt);
+  const opt = document.createElement('option');
+  opt.value = p.periodId;
+  opt.textContent = `Período: ${p.periodTitle}`;
+  if (p.periodId === currentVal) opt.selected = true;
+  periodSelect.appendChild(opt);
     });
 
     if (currentVal && periods.some(p => p.periodId === currentVal)) {
