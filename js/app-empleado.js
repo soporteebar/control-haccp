@@ -615,19 +615,13 @@ const EmpleadoApp = {
     }
 
     periods.forEach((p, idx) => {
-      const opt = document.createElement('option');
-      opt.value = p.periodId;
-      let labelTag = '';
-      if (idx === 0) {
-        labelTag = ' (Actual)';
-      } else if (idx === 1) {
-        labelTag = ' (Anterior)';
-      }
-      opt.textContent = `Período: ${p.periodTitle}${labelTag}`;
-      if (p.periodId === this.selectedPeriodId) {
-        opt.selected = true;
-      }
-      select.appendChild(opt);
+  const opt = document.createElement('option');
+  opt.value = p.periodId;
+  opt.textContent = `Período: ${p.periodTitle}`;
+  if (p.periodId === this.selectedPeriodId) {
+    opt.selected = true;
+  }
+  select.appendChild(opt);
     });
 
     // Opción para ver todo el historial general
